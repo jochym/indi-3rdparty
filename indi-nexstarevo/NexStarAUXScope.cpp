@@ -188,22 +188,33 @@ void AUXCommand::setRate(unsigned char r)
 // NexStarAUXScope
 /////////////////////////////////////////////////////
 
-NexStarAUXScope::NexStarAUXScope(char const *ip, int port)
+NexStarAUXScope::NexStarAUXScope(char const *ip, int port):
+      DBG_NSEVO(INDI::Logger::DBG_SESSION),
+      DBG_MOUNT(INDI::Logger::getInstance().addDebugLevel("NexStar Evo Verbose", "NSEVO"))
 {
     initScope(ip, port);
 };
 
-NexStarAUXScope::NexStarAUXScope(char const *ip)
+NexStarAUXScope::NexStarAUXScope(char const *ip):
+      DBG_NSEVO(INDI::Logger::DBG_SESSION),
+      DBG_MOUNT(INDI::Logger::getInstance().addDebugLevel("NexStar Evo Verbose", "NSEVO"))
+
 {
     initScope(ip, NSEVO_DEFAULT_PORT);
 };
 
-NexStarAUXScope::NexStarAUXScope(int port)
+NexStarAUXScope::NexStarAUXScope(int port):
+      DBG_NSEVO(INDI::Logger::DBG_SESSION),
+      DBG_MOUNT(INDI::Logger::getInstance().addDebugLevel("NexStar Evo Verbose", "NSEVO"))
+
 {
     initScope(NSEVO_DEFAULT_IP, port);
 };
 
-NexStarAUXScope::NexStarAUXScope()
+NexStarAUXScope::NexStarAUXScope():
+      DBG_NSEVO(INDI::Logger::DBG_SESSION),
+      DBG_MOUNT(INDI::Logger::getInstance().addDebugLevel("NexStar Evo Verbose", "NSEVO"))
+
 {
     initScope(NSEVO_DEFAULT_IP, NSEVO_DEFAULT_PORT);
 };
