@@ -189,32 +189,29 @@ void AUXCommand::setRate(unsigned char r)
 /////////////////////////////////////////////////////
 
 NexStarAUXScope::NexStarAUXScope(char const *ip, int port):
-      DBG_NSEVO(INDI::Logger::DBG_SESSION),
-      DBG_MOUNT(INDI::Logger::getInstance().addDebugLevel("NexStar Evo Verbose", "NSEVO"))
+      DBG_NSAUX(INDI::Logger::DBG_SESSION),
+      DBG_AUXMOUNT(INDI::Logger::getInstance().addDebugLevel("NexStar AUX Verbose", "NSAUX"))
 {
     initScope(ip, port);
 };
 
 NexStarAUXScope::NexStarAUXScope(char const *ip):
-      DBG_NSEVO(INDI::Logger::DBG_SESSION),
-      DBG_MOUNT(INDI::Logger::getInstance().addDebugLevel("NexStar Evo Verbose", "NSEVO"))
-
+      DBG_NSAUX(INDI::Logger::DBG_SESSION),
+      DBG_AUXMOUNT(INDI::Logger::getInstance().addDebugLevel("NexStar AUX Verbose", "NSAUX"))
 {
     initScope(ip, NSEVO_DEFAULT_PORT);
 };
 
 NexStarAUXScope::NexStarAUXScope(int port):
-      DBG_NSEVO(INDI::Logger::DBG_SESSION),
-      DBG_MOUNT(INDI::Logger::getInstance().addDebugLevel("NexStar Evo Verbose", "NSEVO"))
-
+      DBG_NSAUX(INDI::Logger::DBG_SESSION),
+      DBG_AUXMOUNT(INDI::Logger::getInstance().addDebugLevel("NexStar AUX Verbose", "NSAUX"))
 {
     initScope(NSEVO_DEFAULT_IP, port);
 };
 
 NexStarAUXScope::NexStarAUXScope():
-      DBG_NSEVO(INDI::Logger::DBG_SESSION),
-      DBG_MOUNT(INDI::Logger::getInstance().addDebugLevel("NexStar Evo Verbose", "NSEVO"))
-
+      DBG_NSAUX(INDI::Logger::DBG_SESSION),
+      DBG_AUXMOUNT(INDI::Logger::getInstance().addDebugLevel("NexStar AUX Verbose", "NSAUX"))
 {
     initScope(NSEVO_DEFAULT_IP, NSEVO_DEFAULT_PORT);
 };
@@ -335,7 +332,7 @@ bool NexStarAUXScope::Connect(int portFD)
     if (PortFD > 0)
     {
         // We are connected. Just start processing!
-	    DEBUG(DBG_NSEVO,"Connection ready. Starting Processing.\n");
+	    DEBUG(DBG_NSAUX,"Connection ready. Starting Processing.\n");
         readMsgs();
         return true;
     }
@@ -354,7 +351,7 @@ bool NexStarAUXScope::Connect(int portFD)
 
 bool NexStarAUXScope::Disconnect()
 {
-    DEBUG(DBG_NSEVO,"Disconnecting.\n");
+    DEBUG(DBG_NSAUX,"Disconnecting.\n");
     closeConnection();
     return true;
 }
