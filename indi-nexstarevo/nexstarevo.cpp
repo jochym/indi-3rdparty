@@ -374,8 +374,8 @@ bool NexStarEvo::initProperties()
     //FP default connection options
     serialConnection->setDefaultBaudRate(Connection::Serial::B_19200);
 
-    tcpConnection->setDefaultHost("192.168.1.1");
-    tcpConnection->setDefaultPort(2000);
+    tcpConnection->setDefaultHost(NSEVO_DEFAULT_IP);
+    tcpConnection->setDefaultPort(NSEVO_DEFAULT_PORT);
 
     return true;
 }
