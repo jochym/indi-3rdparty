@@ -117,7 +117,7 @@ bool NexStarEvo::Abort()
 
     AxisStatusAZ = AxisStatusALT = STOPPED;
     ScopeStatus                  = IDLE;
-    scope.Abort();
+    //scope.Abort();
     AbortSP.s = IPS_OK;
     IUResetSwitch(&AbortSP);
     IDSetSwitch(&AbortSP, nullptr);
@@ -154,12 +154,13 @@ bool NexStarEvo::Handshake()
 {
     //scope.initScope(tcpConnection->host(), tcpConnection->port());
     
-    return scope.Connect(PortFD);
+    //return scope.Connect(PortFD);
+    return true ;
 }
 
 bool NexStarEvo::Disconnect()
 {
-    scope.Disconnect();
+    //scope.Disconnect();
     return INDI::Telescope::Disconnect();
 }
 
@@ -173,7 +174,7 @@ bool NexStarEvo::Park()
     // Park at the northern horizon
     // This is a designated by celestron parking position
     Abort();
-    scope.Park();
+    //scope.Park();
     TrackState = SCOPE_PARKING;
     ParkSP.s   = IPS_BUSY;
     IDSetSwitch(&ParkSP, nullptr);
