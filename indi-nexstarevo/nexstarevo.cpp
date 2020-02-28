@@ -75,8 +75,8 @@ NexStarEvo::NexStarEvo()
     //FP
     LOG_INFO("NexStarEvo instancing\n");
 
-    //Both communication available, Serial and network (tcp/ip). Default to none.
-    setTelescopeConnection(CONNECTION_NONE);
+    //Both communication available, Serial and network (tcp/ip). Default to TCP.
+    setTelescopeConnection(CONNECTION_TCP);
 
     // Approach from no further then degs away
     Approach = 1.0;
