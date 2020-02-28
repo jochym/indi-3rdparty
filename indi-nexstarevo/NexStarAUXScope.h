@@ -139,4 +139,7 @@ class NexStarAUXScope : public INDI::Telescope
     bool waitCTS(float timeout);
     int nevo_tty_read(int PortFD,char *buf,int bufsiz,int timeout,int *n);
     int nevo_tty_write (int PortFD,char *buf,int bufsiz,float timeout,int *n);
+
+    unsigned int DBG_NSEVO;
+    unsigned int DBG_MOUNT;
 };
