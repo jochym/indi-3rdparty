@@ -696,6 +696,7 @@ void NexStarAUXScope::readMsgs()
     //while ((n = recv(sock, buf, sizeof(buf), MSG_DONTWAIT | MSG_PEEK)) > 0)
    
     // search for response packet preamble (0x3b)
+    DEBUG(DBG_NSAUX,"Searching for 0x3b header.\n");
     do 
     {
         if (nevo_tty_read(PortFD,(char*)buf,1,READ_TIMEOUT,&n) != TTY_OK)
@@ -704,13 +705,17 @@ void NexStarAUXScope::readMsgs()
     while (buf[0] != 0x3b);
 
     // packet preamble is found, now read packet length.
+    DEBUG(DBG_NSAUX,"Got 0x3b header. Reading the length\n");
     if (nevo_tty_read(PortFD,(char*)(buf+1),1,READ_TIMEOUT,&n) != TTY_OK)
         return;
 
     // now packet length is known, read the rest of the packet.
+    DEBUG(DBG_NSAUX,"Got length. Reading payload.\n");
     if (nevo_tty_read(PortFD,(char*)(buf+2),buf[1]+1,READ_TIMEOUT,&n)
         != TTY_OK || n != buf[1] + 1)
         return;
+
+    DEBUG(DBG_NSAUX,"We should not be here. EVER!\n");
 
     n += 2;
 
