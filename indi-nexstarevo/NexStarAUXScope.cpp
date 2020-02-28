@@ -267,7 +267,7 @@ bool NexStarAUXScope::detectScope()
     //FP
     //return true;
     fprintf(stderr, "NSEAUX: Detect scope\n");
-    
+
     struct sockaddr_in myaddr;           /* our address */
     struct sockaddr_in remaddr;          /* remote address */
     socklen_t addrlen = sizeof(remaddr); /* length of addresses */
@@ -910,7 +910,7 @@ int NexStarAUXScope::nevo_tty_read(int PortFD,char *buf,int bufsiz,int timeout,i
 {
     int errcode;
     char errmsg[MAXRBUF];
-
+    fprintf(stderr, "nevo_tty_read: %d\n", PortFD);
     // if serial, set RTS to off to receive: PC port bahaves as half duplex.
     if (getActiveConnection() == serialConnection)
         setRTS(0);
@@ -930,6 +930,7 @@ int NexStarAUXScope::nevo_tty_write(int PortFD,char *buf,int bufsiz,float timeou
     int errcode ,ne;
     char errmsg[MAXRBUF];
 
+    fprintf(stderr, "nevo_tty_read: %d\n", PortFD);
     // if serial, set RTS to on then wait for CTS on to write: PC port
     // bahaves as half duplex. RTS may be already on.
     if (getActiveConnection() == serialConnection)
