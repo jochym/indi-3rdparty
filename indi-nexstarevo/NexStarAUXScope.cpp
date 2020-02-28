@@ -324,10 +324,7 @@ bool NexStarAUXScope::Connect(int portFD)
     if (PortFD > 0)
     {
         // We are connected. Just start processing!
-        //fprintf(stderr, "Connection ready. Starting Processing.\n");
-	//DEBUG(DBG_NSEVO,"Connection ready. Starting Processing.\n");
-        //FPsock=PortFD;
-        //msleep(500);
+	    DEBUG(DBG_NSEVO,"Connection ready. Starting Processing.\n");
         readMsgs();
         return true;
     }
@@ -337,7 +334,7 @@ bool NexStarAUXScope::Connect(int portFD)
     if (!detectScope())
     {
         //fprintf(stderr, "Cannot detect the scope!\n");
-	//FP
+	    //FP
         LOG_INFO("Connect: cannot detect the scope!\n");
     }
     return false;
@@ -346,7 +343,7 @@ bool NexStarAUXScope::Connect(int portFD)
 
 bool NexStarAUXScope::Disconnect()
 {
-    fprintf(stderr, "Disconnecting\n");
+    DEBUG(DBG_NSEVO,"Disconnecting.\n");
     closeConnection();
     return true;
 }
@@ -362,11 +359,8 @@ bool NexStarAUXScope::UpdateLocation(double lat, double lon, double elev)
 // FP modified
 void NexStarAUXScope::closeConnection()
 {
-    //if (sock > 0)
     if (PortFD > 0)
     {
-        //close(sock);
-        //sock = 0;
         close(PortFD);
         PortFD = 0;
     }
