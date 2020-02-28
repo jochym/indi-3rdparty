@@ -266,7 +266,8 @@ bool NexStarAUXScope::detectScope()
 {
     //FP
     //return true;
-
+    fprintf(stderr, "NSEAUX: Detect scope\n");
+    
     struct sockaddr_in myaddr;           /* our address */
     struct sockaddr_in remaddr;          /* remote address */
     socklen_t addrlen = sizeof(remaddr); /* length of addresses */
@@ -328,7 +329,7 @@ bool NexStarAUXScope::detectScope()
 bool NexStarAUXScope::Connect(int portFD)
 {
     PortFD = portFD;
-
+    fprintf(stderr, "NSEAUX: connect %d\n", PortFD);
     if (PortFD > 0)
     {
         // We are connected. Just start processing!
