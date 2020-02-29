@@ -76,7 +76,7 @@ NexStarEvo::NexStarEvo()
     LOG_INFO("NexStarEvo instancing\n");
 
     //Both communication available, Serial and network (tcp/ip). Default to TCP.
-    setTelescopeConnection(CONNECTION_TCP);
+    setTelescopeConnection(CONNECTION_TCP|CONNECTION_SERIAL);
 
     // Approach from no further then degs away
     Approach = 1.0;
@@ -154,7 +154,7 @@ bool NexStarEvo::Handshake()
 {
     //scope.initScope(tcpConnection->host(), tcpConnection->port());
     
-    //return scope.Connect(PortFD);
+    return scope.Connect(PortFD);
     return true ;
 }
 
