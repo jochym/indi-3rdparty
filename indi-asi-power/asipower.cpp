@@ -93,14 +93,19 @@ IndiAsiPower::~IndiAsiPower()
 bool IndiAsiPower::Connect()
 {
     // Init GPIO
-    DEBUGF(INDI::Logger::DBG_SESSION, "pigpio version %d.", get_pigpio_version(m_piId));
-    DEBUGF(INDI::Logger::DBG_SESSION, "Hardware revision %d.", get_hardware_revision(m_piId));
+    DEBUGF(INDI::Logger::DBG_SESSION, "pigpiod_if2 version %lu.", pigpiod_if_version());
     m_piId = pigpio_start(NULL,NULL);
 
     if (m_piId < 0)
     {
         DEBUGF(INDI::Logger::DBG_ERROR, "pigpio initialisation failed: %d", m_piId);
         return false;
+    }
+    DEBUGF(INDI::Logger::DBG_SESSION, "pigpio version %lu.", get_pigpio_version(m_piId));
+    DEBUGF(INDI::Logger::DBG_SESSION, "Hardware revision %x.", get_hardware_revision(m_piId));
+    for(int i=0; i<n_gpio_pin; i++)
+    {
+        set_pull_up_down(m_piId, gpio_pin[i], PI_PUD_DOWN);
     }
     DEBUG(INDI::Logger::DBG_SESSION, "ASI Power connected successfully.");
     return true;
@@ -131,9 +136,10 @@ bool IndiAsiPower::initProperties()
     {
         for(int j=0; j<n_dev_type;j++)
         {
-            IUFillSwitch(&DeviceS[i][j], (dev +std::to_string(i) + std::to_string(j)).c_str(), dev_type[j].c_str(), ISS_ON);
+            IUFillSwitch(&DeviceS[i][j], (dev +std::to_string(i) + std::to_string(j)).c_str(), dev_type[j].c_str(), j==0?ISS_ON:ISS_OFF);
         }
-        IUFillSwitchVector(&DeviceSP[i], DeviceS[i], n_dev_type, getDeviceName(), (dev +std::to_string(i)).c_str(), (port +std::to_string(i)).c_str(), MAIN_CONTROL_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
+        // Label ports 1-4 using i+1 rather than 0-3
+        IUFillSwitchVector(&DeviceSP[i], DeviceS[i], n_dev_type, getDeviceName(), (dev +std::to_string(i)).c_str(), (port +std::to_string(i+1)).c_str(), MAIN_CONTROL_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
 
         IUFillSwitch(&OnOffS[i][0], (onoff + std::to_string(i) +"OFF").c_str(), "Off", ISS_ON);
         IUFillSwitch(&OnOffS[i][1], (onoff + std::to_string(i) +"ON").c_str(), "On", ISS_OFF);
@@ -258,13 +264,21 @@ bool IndiAsiPower::ISNewSwitch (const char *dev, const char *name, ISState *stat
                     DutyCycleNP[i].s = IPS_IDLE;
                     DutyCycleN[i][0].value = max_pwm_duty;
                     IDSetNumber(&DutyCycleNP[i], nullptr);
+                    if(m_type[i] == 0)
+                    {
+                        OnOffSP[i].s = IPS_OK;
+                        OnOffS[i][0].s = ISS_ON;          // Switch off if type None
+                        OnOffS[i][1].s = ISS_OFF;         // Switch off if type None
+                        IDSetSwitch(&OnOffSP[i], NULL);
+                        gpio_write(m_piId, gpio_pin[i], PI_LOW);
+                        DEBUGF(INDI::Logger::DBG_SESSION, "%s %s disabled", DeviceSP[i].label, dev_type[m_type[i]].c_str());
+                    }
                     DEBUGF(INDI::Logger::DBG_SESSION, "%d%% duty cycle set on %s %s", max_pwm_duty, DeviceSP[i].label, dev_type[m_type[i]].c_str() );
                 }
             }
             // handle on/off for device i
             if (!strcmp(name, OnOffSP[i].name))
             {
-                IUUpdateSwitch(&OnOffSP[i], states, names, n);
                 // verify a valid device - not of type None
                 if(m_type[i] == 0)
                 {
@@ -273,6 +287,7 @@ bool IndiAsiPower::ISNewSwitch (const char *dev, const char *name, ISState *stat
                     DEBUGF(INDI::Logger::DBG_ERROR, "%s %s is not in use", DeviceSP[i].label, dev_type[m_type[i]].c_str());
                     return false;
                 }
+                IUUpdateSwitch(&OnOffSP[i], states, names, n);
                 // Switch OFF
                 if ( OnOffS[i][0].s == ISS_ON )
                 {
@@ -287,7 +302,6 @@ bool IndiAsiPower::ISNewSwitch (const char *dev, const char *name, ISState *stat
                         set_PWM_dutycycle(m_piId, gpio_pin[i], 0);
                     }
                     OnOffSP[i].s = IPS_IDLE;
-////////                    OnOffS[i][1].s = ISS_OFF;
                     IDSetSwitch(&OnOffSP[i], NULL);
                     return true;
                 }
@@ -305,7 +319,6 @@ bool IndiAsiPower::ISNewSwitch (const char *dev, const char *name, ISState *stat
                         set_PWM_dutycycle(m_piId, gpio_pin[i], DutyCycleN[i][0].value);
                     }
                     OnOffSP[i].s = IPS_OK;
-////////                    OnOffS[i][0].s = ISS_OFF;
                     IDSetSwitch(&OnOffSP[i], NULL);
                     return true;
                 }

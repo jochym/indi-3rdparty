@@ -1,3 +1,28 @@
+indi-asi-power (0.9) buster; urgency=medium
+
+  * Initialize device type to None
+  * Fix hardware revision and pigpio version reporting
+  * make pigpiod a simple non-forking service
+
+
+ -- Ken Self <ken.kgself@gmail.com>  Sat, 06 Mar 2021 17:50:00 +1100
+
+indi-asi-power (0.8) buster; urgency=medium
+
+  * Label ports 1-4
+ * Force type None to OFF
+
+ -- Ken Self <ken.kgself@gmail.com>  Tue, 02 Mar 2021 13:50:00 +1100
+
+indi-asi-power (0.7) buster; urgency=medium
+
+  * Fix package dependencies
+  * Enable pigpiod.service during install
+  * Initialise GPIO pins to Pull-Down
+  * Add additional port labels
+
+ -- Ken Self <ken.kgself@gmail.com>  Mon, 01 Mar 2021 11:05:00 +1100
+
 indi-asi-power (0.6) buster; urgency=medium
 
   * Link pigpio library statically into pigpiod daemon
