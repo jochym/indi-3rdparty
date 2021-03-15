@@ -153,7 +153,6 @@ bool CelestronAUX::Abort()
     readAUXResponse(stopAlt);
     sendAUXCommand(stopAz);
     readAUXResponse(stopAz);
-
     LOG_INFO("Telescope motion aborted.");
     return true;
 }
@@ -414,8 +413,9 @@ double CelestronAUX::getNorthAz()
     if (!GetDatabaseReferencePosition(location))
         northAz = 0.;
     else
-        northAz = AltAzFromRaDec(get_local_sidereal_time(location.lng), 0., 0.).az;
-    LOGF_DEBUG("North Azimuth = %lf", northAz);
+	// RA north = LST - HA north = LST + 12h
+        northAz = AltAzFromRaDec(get_local_sidereal_time(location.lng) + 12., 0., 0.).az;
+    LOGF_INFO("North Azimuth = %lf", northAz);
     return northAz;
 }
 
