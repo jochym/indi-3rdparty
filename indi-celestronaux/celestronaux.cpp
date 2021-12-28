@@ -2041,7 +2041,7 @@ bool CelestronAUX::processResponse(AUXCommand &m)
                 }
                 if (verBuf != 0)
                 {
-                    memcpy(verBuf, m.data.data(), 4);
+                    memcpy(verBuf, m.data.data(), std::min((size_t)4,m.data.size()));
                 }
                 break;
             default:
