@@ -1,9 +1,8 @@
-cmake_minimum_required (VERSION 3.0)
+cmake_minimum_required(VERSION 3.16)
 project (libstarshootg)
 
-# Using Starshoot G SDK Version: 48.18421.20210202
-set (LIBSTARSHOOTG_VERSION "1.48.1")
-set (LIBSTARSHOOTG_SOVERSION "1")
+set (LIBSTARSHOOTG_VERSION "55.24621")
+set (LIBSTARSHOOTG_SOVERSION "55")
 
 list (APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/")
 list (APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../cmake_modules/")
@@ -17,6 +16,8 @@ set_target_properties (starshootg PROPERTIES VERSION ${LIBSTARSHOOTG_VERSION} SO
 if (APPLE)
 
   set_property (TARGET starshootg PROPERTY IMPORTED_LOCATION "mac/libstarshootg.bin")
+
+  FIX_MACOS_LIBRARIES("libstarshootg" "mac/libstarshootg.bin" "StarShoot")
 
 elseif (UNIX AND NOT WIN32)
 

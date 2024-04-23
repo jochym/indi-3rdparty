@@ -3,7 +3,7 @@
 #
 #  PLAYERONE_FOUND - system has PLAYERONE
 #  PLAYERONE_INCLUDE_DIR - the PLAYERONE include directory
-#  PLAYERONE_LIBRARIES - Link these to use ASI
+#  PLAYERONE_LIBRARIES - Link these to use PLAYERONE
 
 # Redistribution and use is allowed according to the terms of the BSD license.
 # For details see the accompanying COPYING-CMAKE-SCRIPTS file.
@@ -28,10 +28,15 @@ else (PLAYERONE_INCLUDE_DIR AND PLAYERONE_LIBRARIES)
     ${GNUWIN32_DIR}/lib
   )
 
+  find_library(PLAYERONEEFW_LIBRARIES NAMES PlayerOnePW
+    PATHS
+    ${_obLinkDir}
+    ${GNUWIN32_DIR}/lib
+  )
 
-  if (PLAYERONECAM_LIBRARIES)
-    set(PLAYERONE_LIBRARIES ${PLAYERONECAM_LIBRARIES})
-  endif (PLAYERONECAM_LIBRARIES)
+  if (PLAYERONECAM_LIBRARIES AND PLAYERONEEFW_LIBRARIES)
+    set(PLAYERONE_LIBRARIES ${PLAYERONECAM_LIBRARIES} ${PLAYERONEEFW_LIBRARIES})
+  endif (PLAYERONECAM_LIBRARIES AND PLAYERONEEFW_LIBRARIES)
 
 
   if(PLAYERONE_INCLUDE_DIR AND PLAYERONE_LIBRARIES)
@@ -47,7 +52,7 @@ else (PLAYERONE_INCLUDE_DIR AND PLAYERONE_LIBRARIES)
     endif (NOT PLAYERONE_FIND_QUIETLY)
   else (PLAYERONE_FOUND)
     if (PLAYERONE_FIND_REQUIRED)
-      message(FATAL_ERROR "PLAYERONE not found. Please install libPlayerOneCamera.2 http://www.indilib.org")
+      message(FATAL_ERROR "PLAYERONE not found. Please install libPlayerOneCamera.3 http://www.indilib.org")
     endif (PLAYERONE_FIND_REQUIRED)
   endif (PLAYERONE_FOUND)
 

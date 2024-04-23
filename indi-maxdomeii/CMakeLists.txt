@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.16)
 project(indi_maxdomeii C CXX)
 
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/")
@@ -6,7 +6,7 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/../cmake_modules/")
 include(GNUInstallDirs)
 
 set(INDI_MAXDOMEII_VERSION_MAJOR 1)
-set(INDI_MAXDOMEII_VERSION_MINOR 3)
+set(INDI_MAXDOMEII_VERSION_MINOR 4)
 
 find_package(INDI REQUIRED)
 

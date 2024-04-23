@@ -1,3 +1,64 @@
+v1.13
+* Update: PlayerOneCamera SDK to v3.6.1
+
+v1.12
+* Update: PlayerOneCamera SDK to v3.6.0
+
+v1.11
+* Update: PlayerOneCamera SDK to v3.5.0
+
+v1.10
+* Update: PlayerOneCamera SDK to v3.4.1
+
+v1.9
+* Add: sensor mode control for cameras that support it
+
+v1.8
+* Update: PlayerOneCamera SDK to v3.4.0
+
+v1.7
+* Update: PlayerOneCamera SDK to v3.3.0
+
+v1.6
+* Update: PlayerOnePW SDK to v1.2.0
+
+v1.5
+* BugFix: top quarter noise on bin2 image
+
+v1.4
+* Update: PlayerOneCamera SDK to v3.2.2
+
+v1.3
+* Update: PlayerOneCamera SDK to v3.2.1
+
+v1.2
+* Add: single camera driver for multi threading
+* Add: flip property with bayer compensation
+* Add: nickname property for multi camera driver
+* Update: PlayerOneCamera SDK to v3.2.0
+
+v1.1
+* Update: PlayerOnePW SDK to v1.1.0
+
+v1.0
+* Add: PlayerOne Filter Wheel driver
+* Update: PlayerOneCamera SDK to v3.1.1
+
+v0.9
+* Update: PlayerOneCamera SDK to v3.1.0
+
+v0.8
+* Update: PlayerOneCamera SDK to v3.0.4
+
+v0.7
+* Update: PlayerOneCamera SDK to v3.0.3
+
+v0.6
+* Update: PlayerOneCamera SDK to v3.0.2
+
+v0.5
+* Update: PlayerOneCamera SDK to v2.0.6
+
 v0.4
 * Update: PlayerOneCamera SDK to v2.0.5
 
@@ -10,4 +71,4 @@ v0.2
   BugFix: temperature digit in playerone_camera_test.cpp
 
 v0.1
-* Initial version of Player One Camera driver
+* Initial version of PlayerOne Camera driver

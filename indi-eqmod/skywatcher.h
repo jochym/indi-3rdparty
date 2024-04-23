@@ -75,12 +75,31 @@ class Skywatcher
         uint32_t GetDEEncoderHome();
         uint32_t GetRAPeriod();
         uint32_t GetDEPeriod();
+
+        INDI_DEPRECATED("Use GetRAMotorStatus(INDI::PropertyLight).")
         void GetRAMotorStatus(ILightVectorProperty *motorLP);
+        void GetRAMotorStatus(INDI::PropertyLight motorLP);
+        
+        INDI_DEPRECATED("Use GetDEMotorStatus(INDI::PropertyLight).")
         void GetDEMotorStatus(ILightVectorProperty *motorLP);
+        void GetDEMotorStatus(INDI::PropertyLight motorLP);
+
+        INDI_DEPRECATED("Use InquireBoardVersion(INDI::PropertyText).")
         void InquireBoardVersion(ITextVectorProperty *boardTP);
+        void InquireBoardVersion(INDI::PropertyText boardTP);
+        void InquireBoardVersion(char **boardinfo);
+
         void InquireFeatures();
+
+        INDI_DEPRECATED("Use InquireRAEncoderInfo(INDI::PropertyNumber).")
         void InquireRAEncoderInfo(INumberVectorProperty *encoderNP);
+        void InquireRAEncoderInfo(INDI::PropertyNumber encoderNP);
+
+        INDI_DEPRECATED("Use InquireDEEncoderInfo(INDI::PropertyNumber).")
         void InquireDEEncoderInfo(INumberVectorProperty *encoderNP);
+        void InquireDEEncoderInfo(INDI::PropertyNumber encoderNP);
+
+
         void Init();
         void SlewRA(double rate);
         void SlewDE(double rate);
@@ -247,6 +266,7 @@ class Skywatcher
         struct timeval lastreadmotorposition[NUMBER_OF_SKYWATCHERAXIS];
 
         // Functions
+        void InquireEncoderInfo(SkywatcherAxis axis, double *steppersvalues);
         void CheckMotorStatus(SkywatcherAxis axis);
         void ReadMotorStatus(SkywatcherAxis axis);
         void SetMotion(SkywatcherAxis axis, SkywatcherAxisStatus newstatus);
@@ -336,6 +356,6 @@ class Skywatcher
 
         bool snapportstatus[NUMBER_OF_SKYWATCHERAXIS];
 
-        const uint8_t EQMOD_TIMEOUT = 5;
-        const uint8_t EQMOD_MAX_RETRY = 3;
+        const long EQMOD_TIMEOUT = 200000; // us
+        const uint8_t EQMOD_MAX_RETRY = 10;
 };

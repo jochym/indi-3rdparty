@@ -1,0 +1,11 @@
+indi-libcamera (1.1) bullseye; urgency=low
+
+  * Rebase on rpicam.
+
+ -- Jasem Mutlaq <mutlaqja@ikarustech.com>  Sun, 28 Jan 2024 11:00:00 +0300
+
+indi-libcamera (1.0) bullseye; urgency=low
+
+  * Initial driver.
+
+ -- Jasem Mutlaq <mutlaqja@ikarustech.com>  Sat, 5 Nov 2012 11:00:00 +0300

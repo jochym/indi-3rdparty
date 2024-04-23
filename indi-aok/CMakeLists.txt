@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.16)
 PROJECT(indi-aok C CXX)
 
 LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/")
@@ -15,8 +15,8 @@ include_directories(${NOVA_INCLUDE_DIR})
 
 include(CMakeCommon)
 
-set(SKYWALKER_VERSION_MAJOR 1)
-set(SKYWALKER_VERSION_MINOR 1)
+set(SKYWALKER_VERSION_MAJOR 2)
+set(SKYWALKER_VERSION_MINOR 0)
 
 set(INDI_DATA_DIR "${CMAKE_INSTALL_PREFIX}/share/indi")
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config.h )

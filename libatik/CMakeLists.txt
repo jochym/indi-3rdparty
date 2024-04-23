@@ -1,8 +1,8 @@
-cmake_minimum_required (VERSION 3.0)
+cmake_minimum_required(VERSION 3.16)
 project (libatik)
 
-# Built October 19th, 2021 - SDK API 2020.10.19
-set (ATIK_VERSION "2.2.9")
+# Built with SDK API 2023.07.14.1456
+set (ATIK_VERSION "2.2.11")
 set (ATIK_SOVERSION "2")
 
 set (FLYCAPTURE_VERSION "2.13.3.31")
@@ -20,6 +20,8 @@ set_target_properties (atikcameras PROPERTIES VERSION ${ATIK_VERSION} SOVERSION 
 if (APPLE)
 
   set_property (TARGET atikcameras  PROPERTY IMPORTED_LOCATION "mac/libatikcameras.bin")
+
+  FIX_MACOS_LIBRARIES("libatikcameras" "mac/libatikcameras.bin" "ATIK")
   
   # Install library
   install_imported (TARGETS atikcameras DESTINATION ${CMAKE_INSTALL_LIBDIR})
@@ -52,4 +54,4 @@ elseif (UNIX AND NOT WIN32)
 endif ()
 
 # Install header files
-install (FILES AtikCameras.h DESTINATION include/libatik)
+install (FILES AtikCameras.h AtikDefs.h DESTINATION include/libatik)

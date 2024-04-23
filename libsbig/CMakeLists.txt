@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.0)
+cmake_minimum_required(VERSION 3.16)
 project (libsbig)
 
 set (SBIG_VERSION "4.9.9")
@@ -19,9 +19,11 @@ if (APPLE)
 
   set_property (TARGET sbig PROPERTY IMPORTED_LOCATION "SBIGUDrvOSX.bin")
 
+  FIX_MACOS_LIBRARIES("libsbig" "SBIGUDrvOSX.bin" "SBIG")
+
 elseif (UNIX AND NOT WIN32)
 
-  set (FIRMWARE_INSTALL_DIR "/lib/firmware")
+  set (FIRMWARE_INSTALL_DIR "/lib/firmware" CACHE STRING "sbig firmware installation directory")
 
   if (CMAKE_SYSTEM_PROCESSOR MATCHES "armv+")
     set_property (TARGET sbig PROPERTY IMPORTED_LOCATION "libsbig_armhf.bin")

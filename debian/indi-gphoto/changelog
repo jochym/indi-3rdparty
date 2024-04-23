@@ -1,3 +1,15 @@
+indi-gphoto (3.2) jammy; urgency=medium
+
+  * Fixed opening of remote serial shutter.
+
+ -- Jasem Mutlaq <mutlaqja@ikarustech.com>  Tue, 31 May 2022 20:00:00 +0300
+
+indi-gphoto (3.1) bionic; urgency=medium
+
+  * Binning feature enabled
+
+ -- Blaise-Florentin Collin <thx8411@yahoo.fr>  Sun, 26 Dec 2021 20:00:00 +0300
+
 indi-gphoto (3.0) bionic; urgency=medium
 
   * Upstream update

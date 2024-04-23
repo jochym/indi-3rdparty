@@ -1,0 +1,160 @@
+libsvbony (1.12.6) bionic; urgency=low
+
+  * Upgraded to upstream SVBONY SDK vers. 1.12.6 :
+  * *** Note: The following changes are from 1.12.2 to 1.12.6 ***
+  * Optimizing the Long Exposure Setting of SC432M Camera
+  * Optimize SC432M camera software
+  * Solve the problem of cooling stopping briefly after the camera switches from long exposure to short exposure.
+  * Fixed the problem that SV905C small resolution offset does not take effect
+
+ -- Tetsuya Kakura <jcpgm@outlook.jp>  Fri, 19 Apr 2024 13:00:00 +0900
+
+libsvbony (1.12.1) bionic; urgency=low
+
+  * Upgraded to upstream SVBONY SDK vers. 1.12.1 :
+  * *** Note: The following changes were made both 1.12.1 and 1.12.1 ***
+  * Support SC432M camera
+  * Add the SVB_BAD_PIXEL_CORRECTION_THRESHOLD parameter to set the threshold for bad pixel correction. 
+  * If the difference with surrounding pixels exceeds the threshold, it will be dynamically corrected. 
+  * It takes effect only when the SVB_BAD_PIXEL_CORRECTION_ENABLE parameter is turned on
+  * The cooling camera will no longer turn off cooling and fan when certain parameters are set
+
+ -- Tetsuya Kakura <jcpgm@outlook.jp>  Fri, 1 Dec 2023 12:00:00 +0900
+
+libsvbony (1.11.4) bionic; urgency=low
+
+  * Upgraded to upstream SVBONY SDK vers. 1.11.4 :
+  * *** Note: The following changes were made both 1.11.2 and 1.11.4 ***
+  * Support image flip
+  * Modify SV605CC gain setting
+  * Modify the gain setting of SV605CC/SV605MC
+  * Fix up the problem that the image cannot be obtained when the SV905C is exposed for a long time
+  * Remove the x86 version library in MacOS
+  * Fix up the problem that the last exposure image may be read in soft trigger mode
+
+ -- Tetsuya Kakura <jcpgm@outlook.jp>  Wed, 14 Jun 2023 11:00:00 +0900
+
+libsvbony (1.11.1) bionic; urgency=low
+
+  * Upgraded to upstream SVBONY SDK vers. 1.11.1 :
+  * *** Note: The following changes were made both 1.11.0 and 1.11.1 ***
+  * Support camera SV305C
+  * Fix the problem that the first line and the last line of the image are incorrect when the mono camera is in 16-bit mode
+  * SV305C supports saturation
+  * Improve the frame rate of SV305C in small ROI
+
+ -- Tetsuya Kakura <jcpgm@outlook.jp>  Wed, 26 Apr 2023 11:00:00 +0900
+
+libsvbony (1.10.2) bionic; urgency=low
+
+  * Upgraded to upstream SVBONY SDK vers. 1.10.2 :
+  * Solve the problem that SV405CC soft trigger does not plot
+  * Export SVBRestoreDefaultParam on Linux and MacOS
+  * libSVBCameraSDK.dylib under MacOS sets rpath
+
+ -- Tetsuya Kakura <jcpgm@outlook.jp>  Thu, 24 Feb 2023 07:00:00 +0900
+
+libsvbony (1.10.1) bionic; urgency=low
+
+  * Upgraded to upstream SVBONY SDK vers. 1.10.1 :
+  * Support SV605MC camera
+  * Fixed the issue that SV605CC triggers the photo time
+  * Fix some bugs
+  * Add new API interface functions SVBGetCameraFirmwareVersion and SVBIsCameraNeedToUpgrade
+  * Added a switch for automatic correction of dynamic dead pixels
+  * Add the API interface function SVBRestoreDefaultParam, which can restore the default parameters of the camera
+
+ -- Tetsuya Kakura <jcpgm@outlook.jp>  Thu, 16 Feb 2023 12:00:00 +0900
+
+libsvbony (1.9.8) bionic; urgency=low
+
+  * Upgraded to upstream SVBONY SDK vers. 1.9.8 :
+  * *** Note: The following changes were made both 1.9.7 and 1.9.8 ***
+  * Fixed the bug that SV405CC occasionally loses response(Camera firmware needs to be upgraded to v2.0.0.6)
+  * Fixed the bug that SV405CC cannot set the maximum resolution
+  * Fixed the bug that SV405CC set some resolution images incorrectly
+
+ -- Tetsuya Kakura <jcpgm@outlook.jp>  Mon, 10 Nov 2022 12:00:00 +0900
+
+libsvbony (1.9.6) bionic; urgency=low
+
+  * Upgraded to upstream SVBONY SDK vers. 1.9.6 :
+  * *** Note: The following changes were made from 1.7.3 to 1.9.6 ***
+  * Fixed the bug that the SV705C could not output the image at the low resolution of RAW8
+  * Fixed the bug that the camera could not be opened multiple times through DirectShow when using sharpcap
+  * Disable output syslog
+  * Fixed the bug that the soft trigger of SV505C and SV705C did not output the image
+  * Support SV505C, SV605CC and SV705C
+  * Optimize the full well of SV405CC
+  * Optimize the performance of SV505C
+  * Fixed the problem of unstable temperature control of SV405CC
+  * Fixed the first frame timeout problem of SV405CC soft trigger
+  * Modify the maximum gain of SV405CC to 57dB, and add the HCG gain control
+  * Fixed the problem of unstable temperature control of SV405CC
+  * Fixed the first frame timeout problem of SV405CC soft trigger
+  * Modify the maximum gain of SV405CC to 57dB, and add the HCG gain control
+
+ -- Tetsuya Kakura <jcpgm@outlook.jp>  Mon, 8 Oct 2022 01:00:00 +0900
+
+libsv305 (1.6.11) bionic; urgency=low
+
+  * Upgraded to upstream SVBONY SDK vers. 1.6.5 :
+  * Fix SV405CC temperature regulation issues
+
+ -- Blaise-Florentin Collin <thx8411@yahoo.fr>  Sun, 3 Jul 2022 16:00:00 +0300
+
+libsv305 (1.6.10) bionic; urgency=low
+
+  * Upgraded to upstream SVBONY SDK vers. 1.6.4 :
+
+ -- Blaise-Florentin Collin <thx8411@yahoo.fr>  Thu, 24 Feb 2022 16:00:00 +0300
+
+libsv305 (1.6.9) bionic; urgency=low
+
+  * Upgraded to upstream SVBONY SDK vers. 1.5.0 :
+  * SV305M PRO fixs
+  * SV405C introduced
+
+ -- Blaise-Florentin Collin <thx8411@yahoo.fr>  Wed, 20 Oct 2021 16:00:00 +0300
+
+libsv305 (1.6.8) bionic; urgency=low
+
+  * Mac OS X 64 bits support added
+
+ -- Blaise-Florentin Collin <thx8411@yahoo.fr>  Tue, 21 Sep 2021 16:00:00 +0300
+
+libsv305 (1.6.7) bionic; urgency=low
+
+  * Upgraded to the last upstream SVBONY SDK vers. 1.4.3.
+
+ -- Blaise-Florentin Collin <thx8411@yahoo.fr>  Mon, 20 Sep 2021 16:00:00 +0300
+
+libsv305 (1.6.6) bionic; urgency=low
+
+  * Upgraded to the last upstream SVBONY SDK vers. 1.4.2 provided the 20210819.
+
+ -- Blaise-Florentin Collin <thx8411@yahoo.fr>  Fri, 20 Aug 2021 16:00:00 +0300
+
+libsv305 (1.6.5) bionic; urgency=low
+
+  * Upgraded to the last upstream SVBONY SDK vers. 1.2.5(?) provided the 20201130.
+
+ -- Blaise-Florentin Collin <thx8411@yahoo.fr>  Sun, 10 Jan 2021 16:00:00 +0300
+
+libsv305 (1.6.4) bionic; urgency=low
+
+  * Upgraded to upstream SVBONY SDK vers. 1.6.1.0 20200812.
+
+ -- Blaise-Florentin Collin <thx8411@yahoo.fr>  Wed, 19 Aug 2020 16:00:00 +0300
+
+libsv305 (1.0) bionic; urgency=low
+
+  * Upgraded to upstream SVBONY SDK vers. 1.6.1.0.
+
+ -- Blaise-Florentin Collin <thx8411@yahoo.fr>  Sun, 12 Jul 2020 16:00:00 +0300
+
+libsv305 (0.9) bionic; urgency=low
+
+  * Initial Release.
+
+ -- Blaise-Florentin Collin <thx8411@yahoo.fr>  Wed, 1 Jul 2020 16:00:00 +0300

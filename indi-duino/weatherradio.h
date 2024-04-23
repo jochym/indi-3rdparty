@@ -2,7 +2,7 @@
     Weather Radio - a universal driver for weather stations that
     transmit their sensor data as JSON documents.
 
-    Copyright (C) 2019 Wolfgang Reissenberger <sterne-jaeger@t-online.de>
+    Copyright (C) 2019-2022 Wolfgang Reissenberger <sterne-jaegeropenfuture.de>
 
     This library is free software; you can redistribute it and/or
     modify it under the terms of the GNU Lesser General Public
@@ -136,12 +136,7 @@ protected:
     /**
      * @brief find the matching sensor INDI property
      */
-    INumber *findRawSensorProperty(const sensor_name sensor);
-
-    /**
-     * @brief Find a given weather parameter.
-     */
-    INumber *getWeatherParameter(std::string name);
+    INumber *findRawSensorProperty(const sensor_name sensor);    
 
     /**
      * @brief TTY interface timeout

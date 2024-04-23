@@ -36,7 +36,7 @@ commands={
           'MC_GET_POSITION':0x01,
           'MC_GOTO_FAST':0x02,
           'MC_SET_POSITION':0x04,
-          'MC_GET_???':0x05,
+          'MC_GET_MODEL':0x05,
           'MC_SET_POS_GUIDERATE':0x06,
           'MC_SET_NEG_GUIDERATE':0x07,
           'MC_LEVEL_START':0x0b,
@@ -192,6 +192,7 @@ class NexStarScope:
     
     __mcfw_ver=(7,11,5100//256,5100%256)
     __hcfw_ver=(5,28,5300//256,5300%256)
+    __mbfw_ver=(1,0,0,1)
     
     trg=('MB', 'HC', 'UKN1', 'HC+', 'AZM', 'ALT', 'APP', 
             'GPS', 'WiFi', 'BAT', 'CHG', 'LIGHT')
@@ -228,13 +229,13 @@ class NexStarScope:
         self._other_handlers = {
             0x10: NexStarScope.cmd_0x10,
             0x18: NexStarScope.cmd_0x18,
-            0xfe: NexStarScope.send_ack,
+            0xfe: NexStarScope.fw_version,
         }
         self._mc_handlers = {
           0x01 : NexStarScope.get_position,
           0x02 : NexStarScope.goto_fast,
           0x04 : NexStarScope.set_position,
-          0x05 : NexStarScope.cmd_0x05,
+          0x05 : NexStarScope.get_model,
           0x06 : NexStarScope.set_pos_guiderate,
           0x07 : NexStarScope.set_neg_guiderate,
           0x0b : NexStarScope.level_start,
@@ -372,8 +373,8 @@ class NexStarScope:
     def set_position(self,data, snd, rcv):
         return b''
 
-    def cmd_0x05(self, data, snd, rcv):
-        return bytes.fromhex('1685')
+    def get_model(self, data, snd, rcv):
+        return bytes.fromhex('1485') # AVX
 
     def set_pos_guiderate(self, data, snd, rcv):
         # The 1.1 factor is experimental to fit the actual hardware
@@ -517,6 +518,8 @@ class NexStarScope:
             trg = '???'
         if trg in ('ALT','AZM'):
             return bytes(NexStarScope.__mcfw_ver)
+        elif trg in ('MB', ):
+            return bytes(NexStarScope.__mbfw_ver)
         elif trg in ('HC', 'HC+'):
             return bytes(NexStarScope.__hcfw_ver)
         else :

@@ -151,7 +151,7 @@ struct _gphoto_driver
     int iso;
     int format;
     int upload_settings;
-    bool delete_sdcard_image;
+    CameraImageHandling handle_sdcard_image;
     bool is_aborted;
 
     char *model;
@@ -811,7 +811,7 @@ static int download_image(gphoto_driver *gphoto, CameraFilePath *fn, int fd)
     {
         DEBUGFDEVICE(device, INDI::Logger::DBG_DEBUG,
                      "Downloading image... Name: (%s) Folder: (%s) Delete from SD card? (%s)", fn->name, fn->folder,
-                     gphoto->delete_sdcard_image ? "true" : "false");
+                     gphoto->handle_sdcard_image == DELETE_IMAGE ? "true" : "false");
     }
 
     strncpy(gphoto->filename, fn->name, sizeof(gphoto->filename));
@@ -997,7 +997,8 @@ static int download_image(gphoto_driver *gphoto, CameraFilePath *fn, int fd)
     int captureTarget = -1;
     gphoto_get_capture_target(gphoto, &captureTarget);
     // If it was set to RAM or SD card image is set to be explicitly deleted
-    if ( (gphoto->is_aborted || gphoto->delete_sdcard_image || captureTarget == 0) && !strstr(gphoto->model, "20D"))
+    if ( (gphoto->is_aborted || gphoto->handle_sdcard_image == DELETE_IMAGE || captureTarget == 0)
+            && !strstr(gphoto->model, "20D"))
     {
         // 2018-04-16 JM: Delete all the folder to make sure there are no ghost images left somehow
         //result = gp_camera_folder_delete_all(gphoto->camera, fn->folder, gphoto->context);
@@ -1059,7 +1060,7 @@ int gphoto_mirrorlock(gphoto_driver *gphoto, int msec)
     {
         DEBUGFDEVICE(device, INDI::Logger::DBG_DEBUG, "Locking mirror by opening remote serial shutter port: %s ...",
                      gphoto->bulb_port);
-        gphoto->bulb_fd = open(gphoto->bulb_port, O_RDWR, O_NONBLOCK);
+        gphoto->bulb_fd = open(gphoto->bulb_port, O_RDWR | O_NONBLOCK);
         if (gphoto->bulb_fd < 0)
         {
             DEBUGFDEVICE(device, INDI::Logger::DBG_DEBUG, "Failed to open serial port: %s", gphoto->bulb_port);
@@ -1209,7 +1210,7 @@ int gphoto_start_exposure(gphoto_driver *gphoto, uint32_t exptime_usec, int mirr
         else if (gphoto->bulb_port[0])
         {
             DEBUGFDEVICE(device, INDI::Logger::DBG_DEBUG, "Opening remote serial shutter port: %s ...", gphoto->bulb_port);
-            gphoto->bulb_fd = open(gphoto->bulb_port, O_RDWR, O_NONBLOCK);
+            gphoto->bulb_fd = open(gphoto->bulb_port, O_RDWR | O_NONBLOCK);
             if (gphoto->bulb_fd < 0)
             {
                 DEBUGFDEVICE(device, INDI::Logger::DBG_ERROR, "Failed to open serial port: %s", gphoto->bulb_port);
@@ -1363,6 +1364,13 @@ int gphoto_read_exposure_fd(gphoto_driver *gphoto, int fd)
 
     if (gphoto->command & DSLR_CMD_CAPTURE)
     {
+        if (gphoto->handle_sdcard_image == IGNORE_IMAGE)
+        {
+            gphoto->command = 0;
+            pthread_mutex_unlock(&gphoto->mutex);
+            return GP_OK;
+        }
+
         result          = download_image(gphoto, &gphoto->camerapath, fd);
         gphoto->command = 0;
         //Set exposure back to original value
@@ -1406,12 +1414,11 @@ int gphoto_read_exposure_fd(gphoto_driver *gphoto, int fd)
             case GP_EVENT_FILE_ADDED:
                 DEBUGDEVICE(device, INDI::Logger::DBG_DEBUG, "File added event completed.");
                 fn     = static_cast<CameraFilePath *>(data);
-                result = download_image(gphoto, fn, fd);
+                if (gphoto->handle_sdcard_image != IGNORE_IMAGE)
+                    download_image(gphoto, fn, fd);
                 waitMS = 100;
                 downloadComplete = true;
                 break;
-            //                pthread_mutex_unlock(&gphoto->mutex);
-            //                return result;
             case GP_EVENT_UNKNOWN:
                 //DEBUGDEVICE(device, INDI::Logger::DBG_DEBUG, "Unknown event.");
                 break;
@@ -1433,12 +1440,8 @@ int gphoto_read_exposure_fd(gphoto_driver *gphoto, int fd)
             default:
                 DEBUGFDEVICE(device, INDI::Logger::DBG_DEBUG, "Got unexpected message: %d", event);
         }
-        //pthread_mutex_unlock(&gphoto->mutex);
-        //usleep(500 * 1000);
-        //pthread_mutex_lock(&gphoto->mutex);
     }
-    //pthread_mutex_unlock(&gphoto->mutex);
-    //return 0;
+    return GP_OK;
 }
 
 int gphoto_abort_exposure(gphoto_driver *gphoto)
@@ -1753,7 +1756,7 @@ gphoto_driver *gphoto_open(Camera *camera, GPContext *context, const char *model
     gphoto->manufacturer    = nullptr;
     gphoto->model           = nullptr;
     gphoto->upload_settings = GP_UPLOAD_CLIENT;
-    gphoto->delete_sdcard_image = false;
+    gphoto->handle_sdcard_image = SAVE_IMAGE;
     gphoto->is_aborted = false;
 
     if (gphoto->format_widget != nullptr)
@@ -2069,9 +2072,9 @@ void gphoto_show_options(gphoto_driver *gphoto)
     }
 }
 
-void gphoto_get_buffer(gphoto_driver *gphoto, const char **buffer, size_t *size)
+void gphoto_get_buffer(gphoto_driver *gphoto, const char **buffer, unsigned long *size)
 {
-    gp_file_get_data_and_size(gphoto->camerafile, buffer, (unsigned long *)size);
+    gp_file_get_data_and_size(gphoto->camerafile, buffer, size);
 }
 
 void gphoto_free_buffer(gphoto_driver *gphoto)
@@ -2388,12 +2391,12 @@ int gphoto_set_capture_target(gphoto_driver *gphoto, int capture_target)
     return GP_OK;
 }
 
-int gphoto_delete_sdcard_image(gphoto_driver *gphoto, bool delete_sdcard_image)
+int gphoto_handle_sdcard_image(gphoto_driver *gphoto, CameraImageHandling handling)
 {
-    gphoto->delete_sdcard_image = delete_sdcard_image;
-
+    gphoto->handle_sdcard_image = handling;
     return GP_OK;
 }
+
 
 void gphoto_force_bulb(gphoto_driver *gphoto, bool enabled)
 {

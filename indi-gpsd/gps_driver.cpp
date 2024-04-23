@@ -1,5 +1,5 @@
 /*******************************************************************************
-  Copyright(c) 2015 Jasem Mutlaq. All rights reserved.
+  Copyright(c) 2015-2023 Jasem Mutlaq. All rights reserved.
   Copyright(c) 2015 Paweł T. Jochym  <jochym AT gmail DOT com>
 ..Copyright(c) 2014 Radek Kaczorek  <rkaczorek AT gmail DOT com>
   Based on Simple GPS Simulator by Jasem Mutlaq
@@ -83,12 +83,12 @@ void GPSD::ISGetProperties(const char *dev)
     // already out of date which could lead to issues as reported in #334
     // Therefore, we reset their status to IDLE as not to cause any abnormal behavior in downstream drivers
     // and clients alike. Next time refresh is used, they can be set to IPS_OK again.
-    if (isConnected() && (LocationNP.s == IPS_OK || TimeTP.s == IPS_OK))
+    if (isConnected() && (LocationNP.getState() == IPS_OK || TimeTP.getState() == IPS_OK))
     {
-        LocationNP.s = IPS_IDLE;
-        TimeTP.s = IPS_IDLE;
-        IDSetNumber(&LocationNP, nullptr);
-        IDSetText(&TimeTP, nullptr);
+        LocationNP.setState(IPS_IDLE);
+        TimeTP.setState(IPS_IDLE);
+        LocationNP.apply();
+        TimeTP.apply();
     }
 
     INDI::GPS::ISGetProperties(dev);
@@ -150,37 +150,20 @@ bool GPSD::updateProperties()
     }
     return true;
 }
-bool GPSD::setSystemTime(time_t &raw_time)
-{
-#ifdef __linux__
-#if defined(__GNU_LIBRARY__)
-#if (__GLIBC__ >= 2) && (__GLIBC_MINOR__ > 30)
-    timespec sTime = {};
-    sTime.tv_sec = raw_time;
-    clock_settime(CLOCK_REALTIME, &sTime);
-#else
-    stime(&raw_time);
-#endif
-#else
-    stime(&raw_time);
-#endif
-#endif
-    return true;
-}
 
 IPState GPSD::updateGPS()
 {
     // Indicate gps refresh in progress
-    if (TimeTP.s != IPS_BUSY)
+    if (TimeTP.getState() != IPS_BUSY)
     {
-        TimeTP.s = IPS_BUSY;
-        IDSetText(&TimeTP, nullptr);
+        TimeTP.setState(IPS_BUSY);
+        TimeTP.apply();
     }
 
-    if (LocationNP.s != IPS_BUSY)
+    if (LocationNP.getState() != IPS_BUSY)
     {
-        LocationNP.s = IPS_BUSY;
-        IDSetNumber(&LocationNP, nullptr);
+        LocationNP.setState(IPS_BUSY);
+        LocationNP.apply();
     }
 
     if (GPSstatusTP.s != IPS_BUSY)
@@ -195,10 +178,10 @@ IPState GPSD::updateGPS()
         IDSetNumber(&PolarisNP, nullptr);
     }
 
-    if (RefreshSP.s != IPS_BUSY)
+    if (RefreshSP.getState() != IPS_BUSY)
     {
-        RefreshSP.s = IPS_BUSY;
-        IDSetSwitch(&RefreshSP, nullptr);
+        RefreshSP.setState(IPS_BUSY);
+        RefreshSP.apply();
     }
 
     struct gps_data_t *gpsData;
@@ -217,27 +200,27 @@ IPState GPSD::updateGPS()
 
         time(&raw_time);
 
-        setSystemTime(raw_time);
+        m_GPSTime = raw_time;
 
         struct tm *utc = gmtime(&raw_time);
         strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%S", utc);
-        IUSaveText(&TimeT[0], ts);
+        TimeTP[0].setText(ts);
 
         struct tm *local = localtime(&raw_time);
         snprintf(ts, sizeof(ts), "%4.2f", (local->tm_gmtoff / 3600.0));
-        IUSaveText(&TimeT[1], ts);
+        TimeTP[1].setText(ts);
 
-        TimeTP.s = IPS_OK;
+        TimeTP.setState(IPS_OK);
     }
 
     if (isSimulation())
     {
-        LocationNP.s                        = IPS_OK;
-        LocationN[LOCATION_LATITUDE].value  = SimLocationN[LOCATION_LATITUDE].value;
-        LocationN[LOCATION_LONGITUDE].value = SimLocationN[LOCATION_LONGITUDE].value;
-        LocationN[LOCATION_ELEVATION].value = SimLocationN[LOCATION_ELEVATION].value;
+        LocationNP.setState(IPS_OK);
+        LocationNP[LOCATION_LATITUDE].value  = SimLocationN[LOCATION_LATITUDE].value;
+        LocationNP[LOCATION_LONGITUDE].value = SimLocationN[LOCATION_LONGITUDE].value;
+        LocationNP[LOCATION_ELEVATION].value = SimLocationN[LOCATION_ELEVATION].value;
 
-        IDSetNumber(&LocationNP, nullptr);
+        LocationNP.apply();
 
         return IPS_OK;
     }
@@ -316,22 +299,22 @@ IPState GPSD::updateGPS()
     // we should have a gps fix data now
     // fprintf(stderr,"Fix: %d time: %lf\n", data->fix.mode, data->fix.time);
 
-    LocationN[LOCATION_LATITUDE].value  = gpsData->fix.latitude;
-    LocationN[LOCATION_LONGITUDE].value = gpsData->fix.longitude;
+    LocationNP[LOCATION_LATITUDE].value  = gpsData->fix.latitude;
+    LocationNP[LOCATION_LONGITUDE].value = gpsData->fix.longitude;
     // 2017-11-15 Jasem: INDI Longitude is 0 to 360 East+
-    if (LocationN[LOCATION_LONGITUDE].value < 0)
-        LocationN[LOCATION_LONGITUDE].value += 360;
+    if (LocationNP[LOCATION_LONGITUDE].value < 0)
+        LocationNP[LOCATION_LONGITUDE].value += 360;
 
     if (gpsData->fix.mode == MODE_3D)
     {
-        LocationN[LOCATION_ELEVATION].value = gpsData->fix.altitude;
+        LocationNP[LOCATION_ELEVATION].value = gpsData->fix.altitude;
     }
     else
     {
         // Presume we are at sea level if we heve no elevation data
-        LocationN[LOCATION_ELEVATION].value = 0;
+        LocationNP[LOCATION_ELEVATION].value = 0;
     }
-    LocationNP.s = IPS_OK;
+    LocationNP.setState(IPS_OK);
 
     // Get Time from raw GPS source
     if (IUFindOnSwitchIndex(&TimeSourceSP) == TS_GPS)
@@ -341,22 +324,21 @@ IPState GPSD::updateGPS()
         raw_time = gpsData->fix.time;
 #else
         raw_time = gpsData->fix.time.tv_sec;
+        m_GPSTime = raw_time;
 #endif
-
-        setSystemTime(raw_time);
 
 #if GPSD_API_MAJOR_VERSION < 9
         unix_to_iso8601(gpsData->fix.time, ts, 32);
 #else
         timespec_to_iso8601(gpsData->fix.time, ts, 32);
 #endif
-        IUSaveText(&TimeT[0], ts);
+        TimeTP[0].setText(ts);
 
         struct tm *local = localtime(&raw_time);
         snprintf(ts, sizeof(ts), "%4.2f", (local->tm_gmtoff / 3600.0));
-        IUSaveText(&TimeT[1], ts);
+        TimeTP[1].setText(ts);
 
-        TimeTP.s = IPS_OK;
+        TimeTP.setState(IPS_OK);
     }
 
     // calculate Polaris HA
@@ -374,8 +356,8 @@ IPState GPSD::updateGPS()
     IDSetText(&GPSstatusTP, nullptr);
     PolarisNP.s = IPS_OK;
     IDSetNumber(&PolarisNP, nullptr);
-    RefreshSP.s = IPS_OK;
-    IDSetSwitch(&RefreshSP, nullptr);
+    RefreshSP.setState(IPS_OK);
+    RefreshSP.apply();
 
     return IPS_OK;
 }

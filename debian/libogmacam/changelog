@@ -1,0 +1,17 @@
+libogmacam (55.24621.20240204) jammy; urgency=medium
+
+  * Upstream release
+
+ -- ogmavision; Mon, 05 Feb 2024 08:23:59 +0800
+
+libogmacam (1.54.2) jammy; urgency=medium
+
+  * Upstream release
+
+ -- Jasem Mutlaq <mutlaqja@ikarustech.com>  Fri, 25 Aug 2023 15:00:00 +0300
+
+libogmacam (1.53.2) bullseye; urgency=medium
+
+  * Upstream release
+
+ -- Jasem Mutlaq <mutlaqja@ikarustech.com>  Tue, 20 Sep 2022 18:00:00 +0300

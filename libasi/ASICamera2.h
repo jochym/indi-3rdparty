@@ -39,7 +39,7 @@ while(1)
 	#define ASICAMERA_API 
 #endif
 
-#define ASICAMERA_ID_MAX 128
+#define ASICAMERA_ID_MAX 256
 
 typedef enum ASI_BAYER_PATTERN{
 	ASI_BAYER_RG=0,
@@ -110,6 +110,11 @@ typedef enum ASI_ERROR_CODE{ //ASI ERROR CODE
 	ASI_ERROR_EXPOSURE_IN_PROGRESS,
 	ASI_ERROR_GENERAL_ERROR,//general error, eg: value is out of valid range
 	ASI_ERROR_INVALID_MODE,//the current mode is wrong
+	ASI_ERROR_GPS_NOT_SUPPORTED, //this camera do not support GPS
+	ASI_ERROR_GPS_VER_ERR, //the FPGA GPS ver is too low
+	ASI_ERROR_GPS_FPGA_ERR, //failed to read or write data to FPGA
+	ASI_ERROR_GPS_PARAM_OUT_OF_RANGE, //start line or end line out of range, should make them between 0 ~ MaxHeight - 1
+	ASI_ERROR_GPS_DATA_INVALID, //GPS has not yet found the satellite or FPGA cannot read GPS data
 	ASI_ERROR_END
 }ASI_ERROR_CODE;
 
@@ -170,7 +175,13 @@ typedef enum ASI_CONTROL_TYPE{ //Control type//
 	ASI_FAN_ON,
 	ASI_PATTERN_ADJUST,
 	ASI_ANTI_DEW_HEATER,
-
+	ASI_FAN_ADJUST,
+	ASI_PWRLED_BRIGNT,
+	ASI_USBHUB_RESET,
+	ASI_GPS_SUPPORT,
+	ASI_GPS_START_LINE,
+	ASI_GPS_END_LINE,
+	ASI_ROLLING_INTERVAL,//microsecond
 }ASI_CONTROL_TYPE;
 
 typedef struct _ASI_CONTROL_CAPS
@@ -203,6 +214,27 @@ typedef ASI_ID ASI_SN;
 typedef struct _ASI_SUPPORTED_MODE{
 	ASI_CAMERA_MODE SupportedCameraMode[16];// this array will content with the support camera mode type.ASI_MODE_END is the end of supported camera mode
 }ASI_SUPPORTED_MODE;
+
+typedef struct _ASI_DATE_TIME{
+	int Year; 
+	int Month; 
+	int Day;
+	int Hour;
+	int Minute;
+	int Second;
+	int Msecond;
+	int Usecond;  //Minimum Unit 0.1us, Maximum number 9999
+	char Unused[64]; //Using the Unused field to store concatenated strings
+} ASI_DATE_TIME;
+
+typedef struct _ASI_GPS_DATA {
+	ASI_DATE_TIME Datetime;
+	double Latitude;  // +: North Latitude -: South Latitude
+	double Longitude; // +: East longitude -: West longitude
+	int Altitude;     // Minimum Unit 0.1m, Maximum number 99999
+	int SatelliteNum; // Maximum number 99
+	char Unused[64];  
+} ASI_GPS_DATA;
 
 #ifndef __cplusplus
 #define ASI_CONTROL_TYPE int
@@ -237,8 +269,22 @@ Paras:
 int* pPIDs: pointer to array of PIDs
 
 Return: length of the array.
+
+Note: This api will be deprecated. Please use ASICameraCheck instead
 ***************************************************************************/
 ASICAMERA_API int ASIGetProductIDs(int* pPIDs);
+
+/***************************************************************************
+Descriptions:
+Check if the device is ASI Camera
+
+Paras:
+int iVID: VID is 0x03C3 for ASI Cameras
+int iPID: PID of the device
+
+Return: ASI_TRUE if the device is ASI Camera, otherwise ASI_FALSE
+***************************************************************************/
+ASICAMERA_API ASI_BOOL ASICameraCheck(int iVID, int iPID);
 
 /***************************************************************************
 Descriptions:
@@ -418,7 +464,8 @@ set the ROI area before capture.
 you must stop capture before call it.
 the width and height is the value after binning.
 ie. you need to set width to 640 and height to 480 if you want to run at 640X480@BIN2
-ASI120's data size must be times of 1024 which means width*height%1024=0
+Specially, ASI120's data size must be times of 1024 which means width*height%1024=0.
+
 Paras:		
 int CameraID: this is get from the camera property use the API ASIGetCameraProperty
 int iWidth,  the width of the ROI area. Make sure iWidth%8 == 0. 
@@ -621,6 +668,38 @@ ASICAMERA_API  ASI_ERROR_CODE ASIGetVideoData(int iCameraID, unsigned char* pBuf
 
 /***************************************************************************
 Descriptions:
+get data from the video buffer.the buffer is very small 
+you need to call this API as fast as possible, otherwise frame will be discarded
+so the best way is maintain one buffer loop and call this API in a loop
+please make sure the buffer size is biger enough to hold one image
+otherwise the this API will crash
+
+
+Paras:		
+int CameraID: this is get from the camera property use the API ASIGetCameraProperty
+unsigned char* pBuffer, caller need to malloc the buffer, make sure the size is big enough
+the size in byte:
+8bit mono:width*height
+16bit mono:width*height*2
+RGB24:width*height*3
+
+int iWaitms, this API will block and wait iWaitms to get one image. the unit is ms
+-1 means wait forever. this value is recommend set to exposure*2+500ms
+
+GPS_DATA *gpsData, if camera support GPS, the GPS data will pass to incomming parameter,
+the GPS data struct is define at the top of this file.
+
+return:
+ASI_SUCCESS : Operation is successful
+ASI_ERROR_CAMERA_CLOSED : camera didn't open
+ASI_ERROR_INVALID_ID  :no camera of this ID is connected or ID value is out of boundary
+ASI_ERROR_TIMEOUT: no image get and timeout
+***************************************************************************/
+ASICAMERA_API  ASI_ERROR_CODE ASIGetVideoDataGPS(int iCameraID, unsigned char* pBuffer, long lBuffSize, int iWaitms, ASI_GPS_DATA *gpsData);
+
+
+/***************************************************************************
+Descriptions:
 PulseGuide of the ST4 port on. this function only work on the module which have ST4 port
 
 
@@ -735,6 +814,33 @@ ASICAMERA_API  ASI_ERROR_CODE ASIGetDataAfterExp(int iCameraID, unsigned char* p
 
 /***************************************************************************
 Descriptions:
+get data after exposure.
+please make sure the buffer size is biger enough to hold one image
+otherwise the this API will crash
+
+
+Paras:		
+int CameraID: this is get from the camera property use the API ASIGetCameraProperty
+unsigned char* pBuffer, caller need to malloc the buffer, make sure the size is big enough
+the size in byte:
+8bit mono:width*height
+16bit mono:width*height*2
+RGB24:width*height*3
+
+GPS_DATA *gpsData, if camera support GPS, the GPS data will pass to incomming parameter,
+the GPS data struct is define at the top of this file.
+
+
+return:
+ASI_SUCCESS : Operation is successful
+ASI_ERROR_CAMERA_CLOSED : camera didn't open
+ASI_ERROR_INVALID_ID  :no camera of this ID is connected or ID value is out of boundary
+ASI_ERROR_TIMEOUT: no image get and timeout
+***************************************************************************/
+ASICAMERA_API  ASI_ERROR_CODE ASIGetDataAfterExpGPS(int iCameraID, unsigned char* pBuffer, long lBuffSize, ASI_GPS_DATA *gpsData);
+
+/***************************************************************************
+Descriptions:
 get camera id stored in flash, only available for USB3.0 camera
 
 Paras:		
@@ -778,6 +884,23 @@ ASI_ERROR_CAMERA_CLOSED : camera didn't open
 ASI_ERROR_INVALID_ID  :no camera of this ID is connected or ID value is out of boundary
 ***************************************************************************/
 ASICAMERA_API ASI_ERROR_CODE ASIGetGainOffset(int iCameraID, int *pOffset_HighestDR, int *pOffset_UnityGain, int *pGain_LowestRN, int *pOffset_LowestRN);
+
+/***************************************************************************
+Descriptions:
+get the frequently-used gain and offset
+Paras:		
+int CameraID: this is get from the camera property use the API ASIGetCameraProperty
+pLGain: Low gain
+pMGain: Middle Gain
+pHGain: High Gain, the gain at the lowest read noise
+pHOffset: Offset at the lowest read noise
+
+return:
+ASI_SUCCESS : Operation is successful
+ASI_ERROR_CAMERA_CLOSED : camera didn't open
+ASI_ERROR_INVALID_ID  :no camera of this ID is connected or ID value is out of boundary
+***************************************************************************/
+ASICAMERA_API ASI_ERROR_CODE ASIGetLMHGainOffset(int iCameraID, int* pLGain, int* pMGain, int* pHGain, int* pHOffset);
 
 /***************************************************************************
 Descriptions:
@@ -900,6 +1023,24 @@ ASI_ERROR_GENERAL_ERROR : the parameter is not right
 ***************************************************************************/
 ASICAMERA_API ASI_ERROR_CODE  ASIGetTriggerOutputIOConf(int iCameraID, ASI_TRIG_OUTPUT_PIN pin, ASI_BOOL *bPinHigh, long *lDelay, long *lDuration);
 
+/***************************************************************************
+Description:
+Get the GPS data
+Paras:
+int CameraID: this is get from the camera property use the API ASIGetCameraProperty.
+ASI_GPS_DATA* startLineGPSData: the GPS data of the start line. the start line number is set by ASISetControlValue(..., ASI_GPS_START_LINE,...). the default value is 0
+ASI_GPS_DATA* endLineGPSData: the GPS data of the end line. the end line number is set by ASISetControlValue(..., ASI_GPS_END_LINE,...). the default value is MaxHeight - 1
+
+return:
+ASI_SUCCESS : Operation is successful
+ASI_ERROR_CAMERA_CLOSED : camera didn't open
+ASI_ERROR_INVALID_ID  : no camera of this ID is connected or ID value is out of boundary
+ASI_ERROR_GPS_NOT_SUPPORTED : this camera do not support GPS
+ASI_ERROR_GPS_VER_ERR : the FPGA GPS ver is too low
+ASI_ERROR_GPS_FPGA_ERR : failed to read or write data to FPGA
+ASI_ERROR_GPS_DATA_INVALID : GPS has not yet found the satellite or FPGA cannot read GPS data
+***************************************************************************/
+ASICAMERA_API ASI_ERROR_CODE ASIGPSGetData(int iCameraID, ASI_GPS_DATA* startLineGPSData, ASI_GPS_DATA* endLineGPSData);
 #ifdef __cplusplus
 }
 #endif

@@ -98,15 +98,17 @@ bool Skywatcher::Disconnect()
 {
     if (PortFD < 0)
         return true;
-    StopMotor(Axis1);
-    StopMotor(Axis2);
-    // Deactivate motor (for geehalel mount only)
-    /*
-    if (MountCode == 0xF0) {
-    dispatch_command(Deactivate, Axis1, nullptr);
-    //read_eqmod();
+
+    try
+    {
+        StopMotor(Axis1);
+        StopMotor(Axis2);
     }
-    */
+    catch (EQModError)
+    {
+        // Ignore error
+    }
+
     return true;
 }
 
@@ -221,6 +223,7 @@ uint32_t Skywatcher::GetlastreadDEIndexer()
     return lastreadIndexer[Axis2];
 }
 
+// deprecated
 void Skywatcher::GetRAMotorStatus(ILightVectorProperty *motorLP)
 {
     ReadMotorStatus(Axis1);
@@ -242,6 +245,28 @@ void Skywatcher::GetRAMotorStatus(ILightVectorProperty *motorLP)
     }
 }
 
+void Skywatcher::GetRAMotorStatus(INDI::PropertyLight motorLP)
+{
+    ReadMotorStatus(Axis1);
+    if (!RAInitialized)
+    {
+        motorLP.findWidgetByName("RAInitialized")->setState(IPS_ALERT);
+        motorLP.findWidgetByName("RARunning")->setState(IPS_IDLE);
+        motorLP.findWidgetByName("RAGoto")->setState(IPS_IDLE);
+        motorLP.findWidgetByName("RAForward")->setState(IPS_IDLE);
+        motorLP.findWidgetByName("RAHighspeed")->setState(IPS_IDLE);
+    }
+    else
+    {
+        motorLP.findWidgetByName("RAInitialized")->setState(IPS_OK);
+        motorLP.findWidgetByName("RARunning")->setState((RARunning ? IPS_OK : IPS_BUSY));
+        motorLP.findWidgetByName("RAGoto")->setState(((RAStatus.slewmode == GOTO) ? IPS_OK : IPS_BUSY));
+        motorLP.findWidgetByName("RAForward")->setState(((RAStatus.direction == FORWARD) ? IPS_OK : IPS_BUSY));
+        motorLP.findWidgetByName("RAHighspeed")->setState(((RAStatus.speedmode == HIGHSPEED) ? IPS_OK : IPS_BUSY));
+    }
+}
+
+// deprecated
 void Skywatcher::GetDEMotorStatus(ILightVectorProperty *motorLP)
 {
     ReadMotorStatus(Axis2);
@@ -260,6 +285,27 @@ void Skywatcher::GetDEMotorStatus(ILightVectorProperty *motorLP)
         IUFindLight(motorLP, "DEGoto")->s        = ((DEStatus.slewmode == GOTO) ? IPS_OK : IPS_BUSY);
         IUFindLight(motorLP, "DEForward")->s     = ((DEStatus.direction == FORWARD) ? IPS_OK : IPS_BUSY);
         IUFindLight(motorLP, "DEHighspeed")->s   = ((DEStatus.speedmode == HIGHSPEED) ? IPS_OK : IPS_BUSY);
+    }
+}
+
+void Skywatcher::GetDEMotorStatus(INDI::PropertyLight motorLP)
+{
+    ReadMotorStatus(Axis2);
+    if (!DEInitialized)
+    {
+        motorLP.findWidgetByName("DEInitialized")->setState(IPS_ALERT);
+        motorLP.findWidgetByName("DERunning")->setState(IPS_IDLE);
+        motorLP.findWidgetByName("DEGoto")->setState(IPS_IDLE);
+        motorLP.findWidgetByName("DEForward")->setState(IPS_IDLE);
+        motorLP.findWidgetByName("DEHighspeed")->setState(IPS_IDLE);
+    }
+    else
+    {
+        motorLP.findWidgetByName("DEInitialized")->setState(IPS_OK);
+        motorLP.findWidgetByName("DERunning")->setState((DERunning ? IPS_OK : IPS_BUSY));
+        motorLP.findWidgetByName("DEGoto")->setState(((DEStatus.slewmode == GOTO) ? IPS_OK : IPS_BUSY));
+        motorLP.findWidgetByName("DEForward")->setState(((DEStatus.direction == FORWARD) ? IPS_OK : IPS_BUSY));
+        motorLP.findWidgetByName("DEHighspeed")->setState(((DEStatus.speedmode == HIGHSPEED) ? IPS_OK : IPS_BUSY));
     }
 }
 
@@ -397,11 +443,59 @@ void Skywatcher::Init()
     }
 }
 
+// deprecated
 void Skywatcher::InquireBoardVersion(ITextVectorProperty *boardTP)
 {
     unsigned nprop             = 0;
     char *boardinfo[3];
     const char *boardinfopropnames[] = { "MOUNT_TYPE", "MOTOR_CONTROLLER", "MOUNT_CODE" };
+
+    InquireBoardVersion(boardinfo);
+    nprop             = 3;
+    // should test this is ok
+    IUUpdateText(boardTP, boardinfo, (char **)boardinfopropnames, nprop);
+    IDSetText(boardTP, nullptr);
+    LOGF_DEBUG("%s(): MountCode = %d, MCVersion = %lx, setting minperiods Axis1=%d Axis2=%d",
+               __FUNCTION__, MountCode, MCVersion, minperiods[Axis1], minperiods[Axis2]);
+    /* Check supported mounts here */
+    /*if ((MountCode == 0x80) || (MountCode == 0x81) || (MountCode == 0x82) || (MountCode == 0x90)) {
+
+    throw EQModError(EQModError::ErrDisconnect, "Mount not supported %s (mount code %d)",
+             boardinfo[0], MountCode);
+    }
+    */
+    free(boardinfo[0]);
+    free(boardinfo[1]);
+    free(boardinfo[2]);
+}
+
+void Skywatcher::InquireBoardVersion(INDI::PropertyText boardTP)
+{
+    unsigned nprop             = 0;
+    char *boardinfo[3];
+    const char *boardinfopropnames[] = { "MOUNT_TYPE", "MOTOR_CONTROLLER", "MOUNT_CODE" };
+
+    InquireBoardVersion(boardinfo);
+    nprop             = 3;
+    // should test this is ok
+    boardTP.update(boardinfo, (char **)boardinfopropnames, nprop);
+    boardTP.apply();
+    LOGF_DEBUG("%s(): MountCode = %d, MCVersion = %lx, setting minperiods Axis1=%d Axis2=%d",
+               __FUNCTION__, MountCode, MCVersion, minperiods[Axis1], minperiods[Axis2]);
+    /* Check supported mounts here */
+    /*if ((MountCode == 0x80) || (MountCode == 0x81) || (MountCode == 0x82) || (MountCode == 0x90)) {
+
+    throw EQModError(EQModError::ErrDisconnect, "Mount not supported %s (mount code %d)",
+             boardinfo[0], MountCode);
+    }
+    */
+    free(boardinfo[0]);
+    free(boardinfo[1]);
+    free(boardinfo[2]);
+}
+
+void Skywatcher::InquireBoardVersion(char **boardinfo)
+{
 
     /*
     uint32_t tmpMCVersion = 0;
@@ -414,7 +508,6 @@ void Skywatcher::InquireBoardVersion(ITextVectorProperty *boardTP)
     */
     minperiods[Axis1] = 6;
     minperiods[Axis2] = 6;
-    nprop             = 3;
     //  strcpy(boardinfopropnames[0],"MOUNT_TYPE");
     boardinfo[0] = (char *)malloc(20 * sizeof(char));
     switch (MountCode)
@@ -443,8 +536,14 @@ void Skywatcher::InquireBoardVersion(ITextVectorProperty *boardTP)
         case 0x0A:
             strcpy(boardinfo[0], "Star Adventurer");
             break;
+	case 0x0C:
+            strcpy(boardinfo[0], "Star Adventurer GTi");
+            break;
         case 0x20:
             strcpy(boardinfo[0], "EQ8-R Pro");
+            break;
+        case 0x22:
+            strcpy(boardinfo[0], "AZEQ6 Pro");
             break;
         case 0x23:
             strcpy(boardinfo[0], "EQ6-R Pro");
@@ -483,21 +582,6 @@ void Skywatcher::InquireBoardVersion(ITextVectorProperty *boardTP)
     boardinfo[2] = (char *)malloc(5);
     sprintf(boardinfo[2], "0x%02X", MountCode);
     boardinfo[2][4] = '\0';
-    // should test this is ok
-    IUUpdateText(boardTP, boardinfo, (char **)boardinfopropnames, nprop);
-    IDSetText(boardTP, nullptr);
-    LOGF_DEBUG("%s(): MountCode = %d, MCVersion = %lx, setting minperiods Axis1=%d Axis2=%d",
-               __FUNCTION__, MountCode, MCVersion, minperiods[Axis1], minperiods[Axis2]);
-    /* Check supported mounts here */
-    /*if ((MountCode == 0x80) || (MountCode == 0x81) || (MountCode == 0x82) || (MountCode == 0x90)) {
-
-    throw EQModError(EQModError::ErrDisconnect, "Mount not supported %s (mount code %d)",
-             boardinfo[0], MountCode);
-    }
-    */
-    free(boardinfo[0]);
-    free(boardinfo[1]);
-    free(boardinfo[2]);
 }
 
 void Skywatcher::InquireFeatures()
@@ -569,7 +653,7 @@ bool Skywatcher::HasPPEC()
 
 bool Skywatcher::HasSnapPort1()
 {
-    return MountCode == 0x04 ||  MountCode == 0x05 ||  MountCode == 0x06 ||  MountCode == 0x0A || MountCode == 0x23
+    return MountCode == 0x04 ||  MountCode == 0x05 ||  MountCode == 0x06 ||  MountCode == 0x0A || MountCode == 0x0C || MountCode == 0x23
            || MountCode == 0xA5;
 }
 
@@ -583,109 +667,117 @@ bool Skywatcher::HasPolarLed()
     return (AxisFeatures[Axis1].hasPolarLed) && (AxisFeatures[Axis2].hasPolarLed);
 }
 
+// deprecated
 void Skywatcher::InquireRAEncoderInfo(INumberVectorProperty *encoderNP)
 {
     double steppersvalues[3];
     const char *steppersnames[] = { "RASteps360", "RAStepsWorm", "RAHighspeedRatio" };
-    // Steps per 360 degrees
-    dispatch_command(InquireGridPerRevolution, Axis1, nullptr);
-    //read_eqmod();
-    RASteps360        = Revu24str2long(response + 1);
-    steppersvalues[0] = (double)RASteps360;
-
-    // Steps per Worm
-    dispatch_command(InquireTimerInterruptFreq, Axis1, nullptr);
-    //read_eqmod();
-    RAStepsWorm = Revu24str2long(response + 1);
-    // There is a bug in the earlier version firmware(Before 2.00) of motor controller MC001.
-    // Overwrite the GearRatio reported by the MC for 80GT mount and 114GT mount.
-    if ((MCVersion & 0x0000FF) == 0x80)
-    {
-        LOGF_WARN("%s: forcing RAStepsWorm for 80GT Mount (%x in place of %x)", __FUNCTION__,
-                  0x162B97, RAStepsWorm);
-        RAStepsWorm = 0x162B97; // for 80GT mount
-    }
-    if ((MCVersion & 0x0000FF) == 0x82)
-    {
-        LOGF_WARN("%s: forcing RAStepsWorm for 114GT Mount (%x in place of %x)", __FUNCTION__,
-                  0x205318, RAStepsWorm);
-        RAStepsWorm = 0x205318; // for 114GT mount
-    }
-    // Correct drift of 4.1 arcsec per minute with HEQ5 firmware 106
-    // drift correction = 1.00455,  64935/1.00455 = 64640 = 0xFC80
-    if (MCVersion == 0x10601)
-    {
-        LOGF_WARN("%s: forcing RAStepsWorm for HEQ5 with firmware 106 (%x in place of %x)", __FUNCTION__,
-                  0xFC80, RAStepsWorm);
-        RAStepsWorm = 0xFC80;
-    }
-
-    steppersvalues[1] = static_cast<double>(RAStepsWorm);
-
-    // Highspeed Ratio
-    dispatch_command(InquireHighSpeedRatio, Axis1, nullptr);
-    //read_eqmod();
-    //RAHighspeedRatio=Revu24str2long(response+1);
-    RAHighspeedRatio = Highstr2long(response + 1);
-
-    steppersvalues[2] = static_cast<double>(RAHighspeedRatio);
+    InquireEncoderInfo(Axis1, steppersvalues);
     // should test this is ok
     IUUpdateNumber(encoderNP, steppersvalues, (char **)steppersnames, 3);
     IDSetNumber(encoderNP, nullptr);
-
-    backlashperiod[Axis1] = static_cast<uint32_t>(((SKYWATCHER_STELLAR_DAY * RAStepsWorm) / static_cast<double>
-                            (RASteps360)) / SKYWATCHER_BACKLASH_SPEED_RA);
 }
 
+void Skywatcher::InquireRAEncoderInfo(INDI::PropertyNumber encoderNP)
+{
+    double steppersvalues[3];
+    const char *steppersnames[] = { "RASteps360", "RAStepsWorm", "RAHighspeedRatio" };
+    InquireEncoderInfo(Axis1, steppersvalues);
+    // should test this is ok
+    encoderNP.update(steppersvalues, (char **)steppersnames, 3);
+    encoderNP.apply();
+}
+
+// deprecated
 void Skywatcher::InquireDEEncoderInfo(INumberVectorProperty *encoderNP)
 {
     double steppersvalues[3];
     const char *steppersnames[] = { "DESteps360", "DEStepsWorm", "DEHighspeedRatio" };
+    InquireEncoderInfo(Axis2, steppersvalues);
+    IUUpdateNumber(encoderNP, steppersvalues, (char **)steppersnames, 3);
+    IDSetNumber(encoderNP, nullptr);
+}
+
+void Skywatcher::InquireDEEncoderInfo(INDI::PropertyNumber encoderNP)
+{
+    double steppersvalues[3];
+    const char *steppersnames[] = { "DESteps360", "DEStepsWorm", "DEHighspeedRatio" };
+    InquireEncoderInfo(Axis2, steppersvalues);
+    // should test this is ok
+    encoderNP.update(steppersvalues, (char **)steppersnames, 3);
+    encoderNP.apply();
+}
+
+
+void Skywatcher::InquireEncoderInfo(SkywatcherAxis axis, double *steppersvalues)
+{
+    
+    uint32_t * Steps360       = nullptr;
+    uint32_t * StepsWorm      = nullptr;
+    uint32_t * HighspeedRatio = nullptr;
+    
+    if (axis == Axis1)
+    {
+      Steps360 = &RASteps360;
+      StepsWorm = &RAStepsWorm;
+      HighspeedRatio = &RAHighspeedRatio;
+    }
+    else
+    {
+      Steps360 = &DESteps360;
+      StepsWorm = &DEStepsWorm;
+      HighspeedRatio = &DEHighspeedRatio;
+    }
+
     // Steps per 360 degrees
-    dispatch_command(InquireGridPerRevolution, Axis2, nullptr);
+    dispatch_command(InquireGridPerRevolution, axis, nullptr);
     //read_eqmod();
-    DESteps360        = Revu24str2long(response + 1);
-    steppersvalues[0] = (double)DESteps360;
+    *Steps360        = Revu24str2long(response + 1);
 
     // Steps per Worm
-    dispatch_command(InquireTimerInterruptFreq, Axis2, nullptr);
+    dispatch_command(InquireTimerInterruptFreq, axis, nullptr);
     //read_eqmod();
-    DEStepsWorm = Revu24str2long(response + 1);
+    *StepsWorm = Revu24str2long(response + 1);
     // There is a bug in the earlier version firmware(Before 2.00) of motor controller MC001.
     // Overwrite the GearRatio reported by the MC for 80GT mount and 114GT mount.
     if ((MCVersion & 0x0000FF) == 0x80)
     {
-        LOGF_WARN("%s: forcing DEStepsWorm for 80GT Mount (%x in place of %x)", __FUNCTION__,
-                  0x162B97, DEStepsWorm);
-        DEStepsWorm = 0x162B97; // for 80GT mount
+        LOGF_WARN("%s: forcing %sStepsWorm for 80GT Mount (%x in place of %x)", __FUNCTION__,
+                  axis == Axis1 ? "RA" : "DE", 0x162B97, *StepsWorm);
+        *StepsWorm = 0x162B97; // for 80GT mount
     }
     if ((MCVersion & 0x0000FF) == 0x82)
     {
-        LOGF_WARN("%s: forcing DEStepsWorm for 114GT Mount (%x in place of %x)", __FUNCTION__,
-                  0x205318, DEStepsWorm);
-        DEStepsWorm = 0x205318; // for 114GT mount
+        LOGF_WARN("%s: forcing %sStepsWorm for 114GT Mount (%x in place of %x)", __FUNCTION__,
+                  axis == Axis1 ? "RA" : "DE", 0x205318, *StepsWorm);
+        *StepsWorm = 0x205318; // for 114GT mount
     }
     // HEQ5 with firmware 106, use same rate as RA
     // drift correction = 1.00455,  64935/1.00455 = 64640 = 0xFC80
     if (MCVersion == 0x10601)
     {
-        LOGF_WARN("%s: forcing DEStepsWorm for HEQ5 with firmware 106 (%x in place of %x)", __FUNCTION__,
-                  0xFC80, DEStepsWorm);
-        DEStepsWorm = 0xFC80;
+        LOGF_WARN("%s: forcing %sStepsWorm for HEQ5 with firmware 106 (%x in place of %x)", __FUNCTION__,
+                  axis == Axis1 ? "RA" : "DE", 0xFC80, *StepsWorm);
+        *StepsWorm = 0xFC80;
     }
 
-    steppersvalues[1] = static_cast<double>(DEStepsWorm);
 
     // Highspeed Ratio
-    dispatch_command(InquireHighSpeedRatio, Axis2, nullptr);
+    dispatch_command(InquireHighSpeedRatio, axis, nullptr);
     //read_eqmod();
-    //DEHighspeedRatio=Revu24str2long(response+1);
-    DEHighspeedRatio  = Highstr2long(response + 1);
-    steppersvalues[2] = static_cast<double>(DEHighspeedRatio);
-    // should test this is ok
-    IUUpdateNumber(encoderNP, steppersvalues, (char **)steppersnames, 3);
-    IDSetNumber(encoderNP, nullptr);
-    backlashperiod[Axis2] =
+    //HighspeedRatio=Revu24str2long(response+1);
+    *HighspeedRatio  = Highstr2long(response + 1);
+
+    steppersvalues[0] = (double)(*Steps360);
+    steppersvalues[1] = static_cast<double>(*StepsWorm);
+    steppersvalues[2] = static_cast<double>(*HighspeedRatio);
+
+
+    if (axis == Axis1)
+      backlashperiod[Axis1] =
+        (long)(((SKYWATCHER_STELLAR_DAY * (double)RAStepsWorm) / (double)RASteps360) / SKYWATCHER_BACKLASH_SPEED_RA);
+    else
+      backlashperiod[Axis2] =
         (long)(((SKYWATCHER_STELLAR_DAY * (double)DEStepsWorm) / (double)DESteps360) / SKYWATCHER_BACKLASH_SPEED_DE);
 }
 
@@ -1335,7 +1427,22 @@ void Skywatcher::TurnPPEC(bool on)
         command = TURN_PPEC_ON_CMD;
     else
         command = TURN_PPEC_OFF_CMD;
-    SetFeature(Axis1, command);
+    try
+    {
+        SetFeature(Axis1, command);
+    }
+    catch(EQModError e)
+    {
+        if (on)
+        {
+            if (e.severity == EQModError::ErrCmdFailed && response[1] == '8')
+                LOG_ERROR("Can't enable PEC: no PEC data");
+            else
+                LOGF_ERROR("Can't enable PEC: %s", e.message);
+        }
+        else
+            LOG_ERROR(e.message);
+    }
 }
 
 void Skywatcher::GetPPECStatus(bool *intraining, bool *inppec)
@@ -1723,10 +1830,18 @@ bool Skywatcher::dispatch_command(SkywatcherCommand cmd, SkywatcherAxis axis, ch
         try
         {
             if (read_eqmod())
+            {
+                if (i > 0)
+                {
+                    LOGF_WARN("%s() : serial port read failed for %dms (%d retries), verify mount link.", __FUNCTION__,
+                              (i * EQMOD_TIMEOUT) / 1000, i);
+                }
                 return true;
+            }
         }
-        catch (EQModError)
+        catch (EQModError ex)
         {
+            DEBUGF(telescope->DBG_COMM, "read_eqmod() failed: %s (attempt %i)", ex.message, i);
             // By this time, we just rethrow the error
             // JM 2018-05-07 immediately rethrow if GET_FEATURES_CMD
             if (i == EQMOD_MAX_RETRY - 1 || cmd == GetFeatureCmd)
@@ -1749,8 +1864,7 @@ bool Skywatcher::read_eqmod()
     {
         //Have to onsider cases when we read ! (error) or 0x01 (buffer overflow)
         // Read until encountring a CR
-        //if ((err_code = tty_read_section(PortFD, response, 0x0D, 15, &nbytes_read)) != TTY_OK)
-        if ((err_code = tty_read_section(PortFD, response, 0x0D, EQMOD_TIMEOUT, &nbytes_read)) != TTY_OK)
+        if ((err_code = tty_read_section_expanded(PortFD, response, 0x0D, 0, EQMOD_TIMEOUT, &nbytes_read)) != TTY_OK)
         {
             char ttyerrormsg[ERROR_MSG_LENGTH];
             tty_error_msg(err_code, ttyerrormsg, ERROR_MSG_LENGTH);
@@ -1773,6 +1887,15 @@ bool Skywatcher::read_eqmod()
     switch (response[0])
     {
         case '=':
+	    //check if response is valid
+	    for (const char *p = &response[1]; *p != '\0'; ++p)
+	    {
+		//only allow uppercase hex chars
+		if (!(isxdigit(*p) && !islower(*p)))
+		{
+            		throw EQModError(EQModError::ErrInvalidCmd, "Invalid response to command %s - Reply %s (response contains non-hex character)", command, response);
+		}
+	    }
             break;
         case '!':
             throw EQModError(EQModError::ErrCmdFailed, "Failed command %s - Reply %s", command, response);

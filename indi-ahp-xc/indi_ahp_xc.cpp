@@ -210,6 +210,154 @@ void AHP_XC::sendFile(IBLOB* Blobs, IBLOBVectorProperty BlobP, unsigned int len)
     LOG_INFO( "Upload complete");
 }
 
+void* AHP_XC::createFITS(int bpp, size_t *memsize, dsp_stream_p stream)
+{
+    int img_type  = USHORT_IMG;
+    int byte_type = TUSHORT;
+    std::string bit_depth = "16 bits per sample";
+    switch (bpp)
+    {
+        case 8:
+            byte_type = TBYTE;
+            img_type  = BYTE_IMG;
+            bit_depth = "8 bits per sample";
+            break;
+
+        case 16:
+            byte_type = TUSHORT;
+            img_type  = USHORT_IMG;
+            bit_depth = "16 bits per pixel";
+            break;
+
+        case 32:
+            byte_type = TUINT;
+            img_type  = ULONG_IMG;
+            bit_depth = "32 bits per sample";
+            break;
+
+        case 64:
+            byte_type = TLONG;
+            img_type  = ULONG_IMG;
+            bit_depth = "64 bits double per sample";
+            break;
+
+        case -32:
+            byte_type = TFLOAT;
+            img_type  = FLOAT_IMG;
+            bit_depth = "32 bits double per sample";
+            break;
+
+        case -64:
+            byte_type = TDOUBLE;
+            img_type  = DOUBLE_IMG;
+            bit_depth = "64 bits double per sample";
+            break;
+
+        default:
+            DEBUGF(INDI::Logger::DBG_ERROR, "Unsupported bits per sample value %d", getBPS());
+            return nullptr;
+    }
+
+    fitsfile *fptr = nullptr;
+    void *memptr;
+    int status    = 0;
+    uint32_t dims = 0;
+    int *sizes = nullptr;
+    uint8_t *buf = getBuffer(stream, &dims, &sizes);
+    int naxis    = static_cast<int>(dims);
+    long *naxes = static_cast<long*>(malloc(sizeof(long) * dims));
+    long nelements = 0;
+
+    for (uint32_t i = 0, nelements = 1; i < dims; nelements *= static_cast<long>(sizes[i++]))
+        naxes[i] = sizes[i];
+    char error_status[MAXINDINAME];
+
+    //  Now we have to send fits format data to the client
+    *memsize = 5760;
+    memptr  = malloc(*memsize);
+    if (!memptr)
+    {
+        LOGF_ERROR("Error: failed to allocate memory: %lu", *memsize);
+        return nullptr;
+    }
+
+    fits_create_memfile(&fptr, &memptr, memsize, 2880, realloc, &status);
+
+    if (status)
+    {
+        fits_report_error(stderr, status); /* print out any error messages */
+        fits_get_errstatus(status, error_status);
+        fits_close_file(fptr, &status);
+        free(memptr);
+        LOGF_ERROR("FITS Error: %s", error_status);
+        return nullptr;
+    }
+
+    fits_create_img(fptr, img_type, naxis, naxes, &status);
+
+    if (status)
+    {
+        fits_report_error(stderr, status); /* print out any error messages */
+        fits_get_errstatus(status, error_status);
+        fits_close_file(fptr, &status);
+        free(memptr);
+        LOGF_ERROR("FITS Error: %s", error_status);
+        return nullptr;
+    }
+
+    addFITSKeywords(fptr, buf, *memsize);
+
+    fits_write_img(fptr, byte_type, 1, nelements, buf, &status);
+
+    if (status)
+    {
+        fits_report_error(stderr, status); /* print out any error messages */
+        fits_get_errstatus(status, error_status);
+        fits_close_file(fptr, &status);
+        free(memptr);
+        LOGF_ERROR("FITS Error: %s", error_status);
+        return nullptr;
+    }
+    fits_close_file(fptr, &status);
+
+    return memptr;
+}
+
+uint8_t* AHP_XC::getBuffer(dsp_stream_p in, uint32_t *dims, int **sizes)
+{
+    void *buffer = malloc(in->len * getBPS() / 8);
+    switch (getBPS())
+    {
+        case 8:
+            dsp_buffer_copy(in->buf, (static_cast<uint8_t *>(buffer)), in->len);
+            break;
+        case 16:
+            dsp_buffer_copy(in->buf, (static_cast<uint16_t *>(buffer)), in->len);
+            break;
+        case 32:
+            dsp_buffer_copy(in->buf, (static_cast<uint32_t *>(buffer)), in->len);
+            break;
+        case 64:
+            dsp_buffer_copy(in->buf, (static_cast<unsigned long *>(buffer)), in->len);
+            break;
+        case -32:
+            dsp_buffer_copy(in->buf, (static_cast<float *>(buffer)), in->len);
+            break;
+        case -64:
+            dsp_buffer_copy(in->buf, (static_cast<double *>(buffer)), in->len);
+            break;
+        default:
+            free (buffer);
+            break;
+    }
+    *dims = in->dims;
+    *sizes = (int*)malloc(sizeof(int) * in->dims);
+    for(int d = 0; d < in->dims; d++)
+        *sizes[d] = in->sizes[d];
+    return static_cast<uint8_t *>(buffer);
+}
+
+
 void AHP_XC::Callback()
 {
     ahp_xc_packet* packet = ahp_xc_alloc_packet();
@@ -265,35 +413,34 @@ void AHP_XC::Callback()
                 center[x].z = lineLocationNP[x].np[2].value - center_tmp[2];
                 double delay_tmp = baseline_delay(Altitude, Azimuth, center[x].values) / sqrt(pow(center[x].x, 2) + pow(center[x].y,
                                    2) + pow(center[x].z, 2));
-                farest = (delay_max > delay_tmp ? farest : x);
-                delay_max = (delay_max > delay_tmp ? delay_max : delay_tmp);
+                farest = (delay_tmp > delay_max ? x : farest);
+                delay_max = (delay_tmp > delay_max ? delay_tmp : delay_max);
             }
         }
         delay[farest] = 0;
-        ahp_xc_set_lag_auto(static_cast<unsigned int>(farest), 0);
-        ahp_xc_set_lag_cross(static_cast<unsigned int>(farest), 0);
+        ahp_xc_set_channel_auto(static_cast<unsigned int>(farest), 0, 1, 1);
+        ahp_xc_set_channel_cross(static_cast<unsigned int>(farest), 0, 1, 1);
         idx = 0;
         for(unsigned int x = 0; x < ahp_xc_get_nlines(); x++)
         {
             for(unsigned int y = x + 1; y < ahp_xc_get_nlines(); y++)
             {
-                if(lineEnableSP[x].sp[0].s == ISS_ON && lineEnableSP[y].sp[0].s == ISS_ON)
+                if((lineEnableSP[x].sp[0].s == ISS_ON) && lineEnableSP[y].sp[0].s == ISS_ON)
                 {
                     double d = fabs(baselines[idx]->getDelay(Altitude, Azimuth));
                     unsigned int delay_clocks = d * ahp_xc_get_frequency() / LIGHTSPEED;
                     delay_clocks = (delay_clocks > 0 ? (delay_clocks < ahp_xc_get_delaysize() ? delay_clocks : ahp_xc_get_delaysize() - 1) : 0);
-                    delay_clocks >>= ahp_xc_get_frequency_divider();
                     if(y == farest)
                     {
                         delay[x] = d;
-                        ahp_xc_set_lag_auto(x, 0);
-                        ahp_xc_set_lag_cross(x, delay_clocks);
+                        ahp_xc_set_channel_auto(x, 0, 1, 1);
+                        ahp_xc_set_channel_cross(x, delay_clocks, 1, 1);
                     }
                     if(x == farest)
                     {
                         delay[y] = d;
-                        ahp_xc_set_lag_auto(y, 0);
-                        ahp_xc_set_lag_cross(y, delay_clocks);
+                        ahp_xc_set_channel_auto(y, 0, 1, 1);
+                        ahp_xc_set_channel_cross(y, delay_clocks, 1, 1);
                     }
                 }
                 idx++;
@@ -315,10 +462,10 @@ void AHP_XC::Callback()
                 {
                     if(HasDSP())
                     {
-                        //DSP->processBLOB(static_cast<unsigned char*>(static_cast<void*>(plot_str[x]->buf)), static_cast<unsigned int>(plot_str[x]->dims), plot_str[x]->sizes, -64); //TODO
+                        DSP->processBLOB(static_cast<unsigned char*>(static_cast<void*>(plot_str[x]->buf)), static_cast<unsigned int>(plot_str[x]->dims), plot_str[x]->sizes, -64); //TODO
                     }
                     size_t memsize = static_cast<unsigned int>(plot_str[x]->len) * sizeof(double);
-                    void* fits = dsp_file_write_fits(-64, &memsize, plot_str[x]);
+                    void* fits = createFITS(-64, &memsize, plot_str[x]);
                     if(fits != nullptr)
                     {
                         blobs[x] = static_cast<char*>(malloc(memsize));
@@ -342,7 +489,7 @@ void AHP_XC::Callback()
                     for(unsigned int x = 0; x < ahp_xc_get_nlines(); x++)
                     {
                         size_t memsize = static_cast<unsigned int>(autocorrelations_str[x]->len) * sizeof(double);
-                        void* fits = dsp_file_write_fits(-64, &memsize, autocorrelations_str[x]);
+                        void* fits = createFITS(-64, &memsize, autocorrelations_str[x]);
                         if(fits != nullptr)
                         {
                             blobs[x] = static_cast<char*>(malloc(memsize));
@@ -371,7 +518,7 @@ void AHP_XC::Callback()
                         for(unsigned int y = x + 1; y < ahp_xc_get_nlines(); y++)
                         {
                             size_t memsize = static_cast<unsigned int>(crosscorrelations_str[x]->len) * sizeof(double);
-                            void* fits = dsp_file_write_fits(-64, &memsize, crosscorrelations_str[x]);
+                            void* fits = createFITS(-64, &memsize, crosscorrelations_str[x]);
                             if(fits != nullptr)
                             {
                                 blobs[x] = static_cast<char*>(malloc(memsize));
@@ -406,7 +553,7 @@ void AHP_XC::Callback()
                     {
                         for(unsigned int y = x + 1; y < ahp_xc_get_nlines(); y++)
                         {
-                            if(lineEnableSP[x].sp[0].s == ISS_ON && lineEnableSP[y].sp[0].s == ISS_ON)
+                            if((lineEnableSP[x].sp[0].s == ISS_ON) && lineEnableSP[y].sp[0].s == ISS_ON)
                             {
                                 int w = plot_str[0]->sizes[0];
                                 int h = plot_str[0]->sizes[1];
@@ -417,9 +564,11 @@ void AHP_XC::Callback()
                                 if(xx >= -w / 2 && xx < w / 2 && yy >= -w / 2 && yy < h / 2)
                                 {
                                     plot_str[0]->buf[z] += (double)packet->crosscorrelations[idx].correlations[packet->crosscorrelations[idx].lag_size /
-                                                           2].coherence;
+                                                           2].magnitude / (double)packet->crosscorrelations[idx].correlations[packet->crosscorrelations[idx].lag_size /
+                                                                   2].counts;
                                     plot_str[0]->buf[w * h - 1 - z] += (double)
-                                                                       packet->crosscorrelations[idx].correlations[packet->crosscorrelations[idx].lag_size / 2].coherence;
+                                                                       packet->crosscorrelations[idx].correlations[packet->crosscorrelations[idx].lag_size / 2].magnitude /
+                                                                       packet->crosscorrelations[idx].correlations[packet->crosscorrelations[idx].lag_size / 2].counts;
                                 }
                             }
                             idx++;
@@ -436,7 +585,7 @@ void AHP_XC::Callback()
                         autocorrelations_str[x]->buf = (dsp_t*)realloc(autocorrelations_str[x]->buf,
                                                        sizeof(dsp_t) * static_cast<unsigned int>(autocorrelations_str[x]->len));
                         for(unsigned int i = 0; i < packet->autocorrelations[x].lag_size; i++)
-                            autocorrelations_str[x]->buf[pos++] = packet->autocorrelations[x].correlations[i].coherence;
+                            autocorrelations_str[x]->buf[pos++] = packet->autocorrelations[x].correlations[i].magnitude;
                     }
                 }
                 if(ahp_xc_get_nbaselines() > 0 && ahp_xc_get_crosscorrelator_lagsize() > 1)
@@ -449,7 +598,7 @@ void AHP_XC::Callback()
                         crosscorrelations_str[x]->buf = (dsp_t*)realloc(crosscorrelations_str[x]->buf,
                                                         sizeof(dsp_t) * static_cast<unsigned int>(crosscorrelations_str[x]->len));
                         for(unsigned int i = 0; i < packet->crosscorrelations[x].lag_size; i++)
-                            crosscorrelations_str[x]->buf[pos++] = packet->crosscorrelations[x].correlations[i].coherence;
+                            crosscorrelations_str[x]->buf[pos++] = packet->crosscorrelations[x].correlations[i].magnitude;
                     }
                 }
             }
@@ -462,12 +611,12 @@ void AHP_XC::Callback()
                 totalcounts[x] += packet->counts[x];
             for(unsigned int y = x + 1; y < ahp_xc_get_nlines(); y++)
             {
-                if(lineEnableSP[x].sp[0].s == ISS_ON && lineEnableSP[y].sp[0].s == ISS_ON)
+                if((lineEnableSP[x].sp[0].s == ISS_ON) && lineEnableSP[y].sp[0].s == ISS_ON)
                 {
                     totalcorrelations[idx].counts += packet->crosscorrelations[idx].correlations[packet->crosscorrelations[idx].lag_size /
                                                      2].counts;
-                    totalcorrelations[idx].correlations += packet->crosscorrelations[idx].correlations[packet->crosscorrelations[idx].lag_size /
-                                                           2].correlations;
+                    totalcorrelations[idx].magnitude += packet->crosscorrelations[idx].correlations[packet->crosscorrelations[idx].lag_size /
+                                                        2].magnitude;
                 }
                 idx++;
             }
@@ -603,8 +752,7 @@ bool AHP_XC::initProperties()
                  0.211121449);
     IUFillNumber(&settingsN[1], "INTERFEROMETER_BANDWIDTH_VALUE", "Filter bandwidth (m)", "%g", 3.0E-12, 3.0E+3, 1.0E-9,
                  1199.169832);
-    IUFillNumber(&settingsN[2], "INTERFEROMETER_RESOLUTION_VALUE", "Clock divider", "%g", 0, 15, 1, 0);
-    IUFillNumberVector(&settingsNP, settingsN, 3, getDeviceName(), "INTERFEROMETER_SETTINGS", "AHP_XC Settings",
+    IUFillNumberVector(&settingsNP, settingsN, 2, getDeviceName(), "INTERFEROMETER_SETTINGS", "AHP_XC Settings",
                        MAIN_CONTROL_TAB, IP_RW, 60, IPS_IDLE);
 
     // Set minimum exposure speed to 0.001 seconds
@@ -661,6 +809,12 @@ bool AHP_XC::updateProperties()
         for (unsigned int x = 0; x < ahp_xc_get_nlines(); x++)
         {
             defineProperty(&lineEnableSP[x]);
+            if(!ahp_xc_has_leds())
+            {
+                defineProperty(&lineLocationNP[x]);
+                defineProperty(&lineDelayNP[x]);
+                defineProperty(&lineStatsNP[x]);
+            }
         }
         if(ahp_xc_get_autocorrelator_lagsize() > 1)
             defineProperty(&autocorrelationsBP);
@@ -781,7 +935,6 @@ bool AHP_XC::ISNewNumber(const char *dev, const char *name, double values[], cha
         {
             baselines[x]->setWavelength(settingsN[0].value);
         }
-        ahp_xc_set_frequency_divider(settingsN[2].value);
         IDSetNumber(&settingsNP, nullptr);
         return true;
     }
@@ -806,7 +959,7 @@ bool AHP_XC::ISNewSwitch(const char *dev, const char *name, ISState *states, cha
                 states[0] = states[1] = states[2] = ISS_OFF;
                 states[3] = ISS_ON;
             }
-            IUUpdateSwitch(getSwitch("DEVICE_BAUD_RATE"), states, names, n);
+            getSwitch("DEVICE_BAUD_RATE").update(states, names, n);
             if (states[3] == ISS_ON)
             {
                 ahp_xc_set_baudrate(R_BASE);
@@ -819,7 +972,7 @@ bool AHP_XC::ISNewSwitch(const char *dev, const char *name, ISState *states, cha
             {
                 ahp_xc_set_baudrate(R_BASEX4);
             }
-            IDSetSwitch(getSwitch("DEVICE_BAUD_RATE"), nullptr);
+            getSwitch("DEVICE_BAUD_RATE").apply();
         }
     }
 
@@ -833,7 +986,8 @@ bool AHP_XC::ISNewSwitch(const char *dev, const char *name, ISState *states, cha
             IUUpdateSwitch(&lineEnableSP[x], states, names, n);
             if(lineEnableSP[x].sp[0].s == ISS_ON)
             {
-                ActiveLine(x, lineEnableSP[x].sp[0].s == ISS_ON, linePowerSP[x].sp[0].s == ISS_ON, lineActiveEdgeSP[x].sp[1].s == ISS_ON,
+                ActiveLine(x, lineEnableSP[x].sp[0].s == ISS_ON
+                           || ahp_xc_has_leds(), linePowerSP[x].sp[0].s == ISS_ON, lineActiveEdgeSP[x].sp[1].s == ISS_ON,
                            lineEdgeTriggerSP[x].sp[1].s == ISS_ON);
                 defineProperty(&linePowerSP[x]);
                 defineProperty(&lineActiveEdgeSP[x]);
@@ -857,21 +1011,24 @@ bool AHP_XC::ISNewSwitch(const char *dev, const char *name, ISState *states, cha
         if(!strcmp(name, linePowerSP[x].name))
         {
             IUUpdateSwitch(&linePowerSP[x], states, names, n);
-            ActiveLine(x, lineEnableSP[x].sp[0].s == ISS_ON, linePowerSP[x].sp[0].s == ISS_ON, lineActiveEdgeSP[x].sp[1].s == ISS_ON,
+            ActiveLine(x, lineEnableSP[x].sp[0].s == ISS_ON
+                       || ahp_xc_has_leds(), linePowerSP[x].sp[0].s == ISS_ON, lineActiveEdgeSP[x].sp[1].s == ISS_ON,
                        lineEdgeTriggerSP[x].sp[1].s == ISS_ON);
             IDSetSwitch(&linePowerSP[x], nullptr);
         }
         if(!strcmp(name, lineActiveEdgeSP[x].name))
         {
             IUUpdateSwitch(&lineActiveEdgeSP[x], states, names, n);
-            ActiveLine(x, lineEnableSP[x].sp[0].s == ISS_ON, linePowerSP[x].sp[0].s == ISS_ON, lineActiveEdgeSP[x].sp[1].s == ISS_ON,
+            ActiveLine(x, lineEnableSP[x].sp[0].s == ISS_ON
+                       || ahp_xc_has_leds(), linePowerSP[x].sp[0].s == ISS_ON, lineActiveEdgeSP[x].sp[1].s == ISS_ON,
                        lineEdgeTriggerSP[x].sp[1].s == ISS_ON);
             IDSetSwitch(&lineActiveEdgeSP[x], nullptr);
         }
         if(!strcmp(name, lineEdgeTriggerSP[x].name))
         {
             IUUpdateSwitch(&lineEdgeTriggerSP[x], states, names, n);
-            ActiveLine(x, lineEnableSP[x].sp[0].s == ISS_ON, linePowerSP[x].sp[0].s == ISS_ON, lineActiveEdgeSP[x].sp[1].s == ISS_ON,
+            ActiveLine(x, lineEnableSP[x].sp[0].s == ISS_ON
+                       || ahp_xc_has_leds(), linePowerSP[x].sp[0].s == ISS_ON, lineActiveEdgeSP[x].sp[1].s == ISS_ON,
                        lineEdgeTriggerSP[x].sp[1].s == ISS_ON);
             IDSetSwitch(&lineEdgeTriggerSP[x], nullptr);
         }
@@ -978,10 +1135,11 @@ void AHP_XC::TimerHit()
         totalcounts[x] = 0;
         for(unsigned int y = x + 1; y < ahp_xc_get_nlines(); y++)
         {
-            correlationsNP.np[idx * 2].value = (double)totalcorrelations[idx].correlations * 1000.0 / (double)getCurrentPollingPeriod();
-            correlationsNP.np[idx * 2 + 1].value = (double)totalcorrelations[idx].correlations / (double)totalcorrelations[idx].counts;
+            correlationsNP.np[idx * 2].value = (double)totalcorrelations[idx].magnitude * 1000.0 / (double)getCurrentPollingPeriod();
+            correlationsNP.np[idx * 2 + 1].value = (double)totalcorrelations[idx].magnitude / (double)totalcorrelations[idx].counts;
             totalcorrelations[idx].counts = 0;
-            totalcorrelations[idx].correlations = 0;
+            totalcorrelations[idx].magnitude = 0;
+            totalcorrelations[idx].phase = 0;
             totalcorrelations[idx].counts = 0;
             idx++;
         }
@@ -1225,15 +1383,10 @@ void AHP_XC::ActiveLine(unsigned int line, bool on, bool power, bool active_low,
     ahp_xc_set_leds(line, (on ? 1 : 0) | (power ? 2 : 0) | (active_low ? 4 : 0) | (edge_triggered ? 8 : 0));
 }
 
-void AHP_XC::SetFrequencyDivider(unsigned char divider)
-{
-    ahp_xc_set_frequency_divider(divider);
-}
-
 void AHP_XC::EnableCapture(bool start)
 {
     if(start)
-        ahp_xc_set_capture_flag(CAP_ENABLE);
+        ahp_xc_set_capture_flags(CAP_ENABLE);
     else
-        ahp_xc_clear_capture_flag(CAP_ENABLE);
+        ahp_xc_set_capture_flags(CAP_NONE);
 }

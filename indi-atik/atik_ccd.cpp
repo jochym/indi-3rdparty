@@ -49,6 +49,8 @@ static class Loader
             int iAvailableDevicesCount = 0;
             std::vector<std::string> cameraNames;
 
+            INDI_UNUSED(hArtemisDLL);
+
             IDLog("Atik Cameras API V%d DLL V%d initializing.", ArtemisAPIVersion(), ArtemisDLLVersion());
 
             for (int loop = 0; loop < MAX_CONNECTION_RETRIES; loop++)
@@ -116,6 +118,9 @@ const char *ATIKCCD::getDefaultName()
 bool ATIKCCD::initProperties()
 {
     INDI::CCD::initProperties();
+
+    CaptureFormat format = {"INDI_RAW", "RAW", 16, true};
+    addCaptureFormat(format);
 
     // Cooler control
     IUFillSwitch(&CoolerS[COOLER_ON], "COOLER_ON", "ON", ISS_OFF);
@@ -226,9 +231,7 @@ bool ATIKCCD::updateProperties()
         }
 
         if (m_CameraFlags & ARTEMIS_PROPERTIES_CAMERAFLAGS_HAS_FILTERWHEEL)
-        {
             INDI::FilterInterface::updateProperties();
-        }
 
         defineProperty(&VersionInfoSP);
     }
@@ -253,9 +256,7 @@ bool ATIKCCD::updateProperties()
         }
 
         if (m_CameraFlags & ARTEMIS_PROPERTIES_CAMERAFLAGS_HAS_FILTERWHEEL)
-        {
             INDI::FilterInterface::updateProperties();
-        }
 
         deleteProperty(VersionInfoSP.name);
     }
@@ -391,6 +392,7 @@ bool ATIKCCD::setupParams()
         else
         {
             setDriverInterface(getDriverInterface() | FILTER_INTERFACE);
+            syncDriverInfo();
 
             FilterSlotN[0].min = 1;
             FilterSlotN[0].max = numFilters;
@@ -537,49 +539,46 @@ void ATIKCCD::updateGainOffset()
     uint8_t data[6] = {0};
     int len = 0;
 
-    if (ControlPresetsS[0].s == ISS_ON)
+    // First read the Gain and Offset boundaries (and value) as if the preset was Custom
+    if (ARTEMIS_OK == ArtemisCameraSpecificOptionGetData(hCam, ID_AtikHorizonGOCustomGain, data, 6, &len))
     {
-        if (ARTEMIS_OK == ArtemisCameraSpecificOptionGetData(hCam, ID_AtikHorizonGOCustomGain, data, 6, &len))
-        {
-            uint16_t const minGain = (reinterpret_cast<uint16_t*>(&data))[0];
-            uint16_t const maxGain = (reinterpret_cast<uint16_t*>(&data))[1];
-            uint16_t const valGain = (reinterpret_cast<uint16_t*>(&data))[2];
-            LOGF_INFO("Horizon current gain: data[0:1] 0x%02X%02X data[2:3] 0x%02X%02X data[4:5] 0x%02X%02X values min %u max %u cur %u",
-                      data[0], data[1], data[2], data[3], data[4], data[5], minGain, maxGain, valGain);
-            ControlN[0].min = static_cast <double> (minGain);
-            ControlN[0].max = static_cast <double> (maxGain);
-            ControlN[0].value = static_cast <double> (valGain);
-            ControlNP.s = IPS_OK;
-        }
-        else
-        {
-            LOG_ERROR("Failed reading Custom Gain.");
-            ControlNP.s = IPS_ALERT;
-        }
-        IDSetNumber(&ControlNP, nullptr);
-
-        if (ARTEMIS_OK == ArtemisCameraSpecificOptionGetData(hCam, ID_AtikHorizonGOCustomOffset, data, 6, &len))
-        {
-            uint16_t const minOffset = (reinterpret_cast<uint16_t*>(&data))[0];
-            uint16_t const maxOffset = (reinterpret_cast<uint16_t*>(&data))[1];
-            uint16_t const valOffset = (reinterpret_cast<uint16_t*>(&data))[2];
-            LOGF_DEBUG("Horizon current offset: data[0:1] 0x%02X%02X data[2:3] 0x%02X%02X data[4:5] 0x%02X%02X values min %u max %u cur %u",
-                       data[0], data[1], data[2], data[3], data[4], data[5], minOffset, maxOffset, valOffset);
-            ControlN[1].min = static_cast <double> (minOffset);
-            ControlN[1].max = static_cast <double> (maxOffset);
-            ControlN[1].value = static_cast <double> (valOffset);
-            ControlNP.s = IPS_OK;
-        }
-        else
-        {
-            LOG_ERROR("Failed reading Custom Offset.");
-            ControlNP.s = IPS_ALERT;
-        }
-        IDSetNumber(&ControlNP, nullptr);
+        uint16_t const minGain = (reinterpret_cast<uint16_t*>(&data))[0];
+        uint16_t const maxGain = (reinterpret_cast<uint16_t*>(&data))[1];
+        uint16_t const valGain = (reinterpret_cast<uint16_t*>(&data))[2];
+        LOGF_INFO("Horizon current gain: data[0:1] 0x%02X%02X data[2:3] 0x%02X%02X data[4:5] 0x%02X%02X values min %u max %u cur %u",
+                  data[0], data[1], data[2], data[3], data[4], data[5], minGain, maxGain, valGain);
+        ControlN[0].min = static_cast <double> (minGain);
+        ControlN[0].max = static_cast <double> (maxGain);
+        ControlN[0].value = static_cast <double> (valGain);
+        ControlNP.s = IPS_OK;
     }
     else
     {
-        // Else one Preset is configured
+        LOG_ERROR("Failed reading Custom Gain.");
+        ControlNP.s = IPS_ALERT;
+    }
+
+    if (ARTEMIS_OK == ArtemisCameraSpecificOptionGetData(hCam, ID_AtikHorizonGOCustomOffset, data, 6, &len))
+    {
+        uint16_t const minOffset = (reinterpret_cast<uint16_t*>(&data))[0];
+        uint16_t const maxOffset = (reinterpret_cast<uint16_t*>(&data))[1];
+        uint16_t const valOffset = (reinterpret_cast<uint16_t*>(&data))[2];
+        LOGF_DEBUG("Horizon current offset: data[0:1] 0x%02X%02X data[2:3] 0x%02X%02X data[4:5] 0x%02X%02X values min %u max %u cur %u",
+                   data[0], data[1], data[2], data[3], data[4], data[5], minOffset, maxOffset, valOffset);
+        ControlN[1].min = static_cast <double> (minOffset);
+        ControlN[1].max = static_cast <double> (maxOffset);
+        ControlN[1].value = static_cast <double> (valOffset);
+        ControlNP.s = IPS_OK;
+    }
+    else
+    {
+        LOG_ERROR("Failed reading Custom Offset.");
+        ControlNP.s = IPS_ALERT;
+    }
+
+    // Then if a Preset other than Custom is used, read the associated values
+    if (ControlPresetsS[0].s != ISS_ON)
+    {
         int const preset_index = IUFindOnSwitchIndex(&ControlPresetsSP) - 1;
         if (0 <= preset_index && preset_index < (int)(sizeof(ControlPresetsS) / sizeof(ControlPresetsS[0])))
         {
@@ -609,10 +608,9 @@ void ATIKCCD::updateGainOffset()
             LOGF_WARN("Failed reading Preset #%d Gain/Offset, incorrect preset index.", preset_index);
             ControlNP.s = IPS_ALERT;
         }
-
-        IDSetNumber(&ControlNP, nullptr);
     }
 
+    IDSetNumber(&ControlNP, nullptr);
 }
 
 bool ATIKCCD::Disconnect()
@@ -783,28 +781,35 @@ bool ATIKCCD::ISNewSwitch(const char *dev, const char *name, ISState *states, ch
 
             bool enabled = (CoolerS[COOLER_ON].s == ISS_ON);
 
-            // If user turns on cooler, but the requested temperature is higher than current temperature
-            // then we set temperature to zero degrees. If that was still higher than current temperature
-            // we return an error
-            if (enabled && TemperatureRequest > TemperatureN[0].value)
+            // If user turns on cooler, but the requested temperature is higher than current temperature by more
+            // than five degrees, then we consider this endangers the device and we alter the temperature target.
+            // The five degrees tolerance is there to adapt to cooling overshoot.
+            if (enabled && TemperatureN[0].value + 5.0f < TemperatureRequest)
             {
-                TemperatureRequest = 0;
-                // If current temperature is still lower than zero, then we shouldn't risk
-                // setting temperature to any arbitrary value. Instead, we report an error and ask
-                // user to explicitly set the requested temperature.
-                if (TemperatureRequest > TemperatureN[0].value)
+                LOGF_WARN("Current temperature is %.2f, refusing to set %.2f (5 degrees warming tolerance). "
+                          "To control cooler, request a lower temperature or let the device warm above %.2f.",
+                          TemperatureN[0].value, TemperatureRequest, TemperatureRequest - 5.0f);
+
+                // If current temperature is lower than zero, then we shouldn't risk
+                // setting temperature to any arbitrary value. Instead, we turn the cooler off and ask
+                // user to explicitly set a new temperature.
+                if (TemperatureN[0].value < 0)
                 {
                     CoolerS[COOLER_ON].s = ISS_OFF;
-                    CoolerS[COOLER_OFF].s = ISS_OFF;
+                    CoolerS[COOLER_OFF].s = ISS_ON;
                     CoolerSP.s = IPS_ALERT;
-                    LOGF_WARN("Cannot manually activate cooler since current temperature is %.2f. To activate cooler, request a lower temperature.",
-                              TemperatureN[0].value);
+                    LOGF_WARN("Stopping cooler. "
+                              "To re-activate, request a lower temperature or let the device warm above %.2f.",
+                              TemperatureRequest);
                     IDSetSwitch(&CoolerSP, nullptr);
-                    return true;
                 }
-
-                SetTemperature(0);
-                return true;
+                // Else we consider we should stabilise at a safe temperature, and set the target to zero degrees.
+                else
+                {
+                    LOG_WARN("Keeping cooler activated, but setting temperature to 0 degrees. "
+                             "To proceed, wait for the device to stabilise or stop the cooler.");
+                    SetTemperature(0);
+                }
             }
 
             return activateCooler(enabled);
@@ -1502,15 +1507,14 @@ void ATIKCCD::exposureSetRequest(ImageState request)
 /////////////////////////////////////////////////////////
 /// Add applicable FITS keywords to header
 /////////////////////////////////////////////////////////
-void ATIKCCD::addFITSKeywords(fitsfile *fptr, INDI::CCDChip *targetChip)
+void ATIKCCD::addFITSKeywords(INDI::CCDChip *targetChip, std::vector<INDI::FITSRecord> &fitsKeywords)
 {
-    INDI::CCD::addFITSKeywords(fptr, targetChip);
+    INDI::CCD::addFITSKeywords(targetChip, fitsKeywords);
 
     if (m_isHorizon)
     {
-        int status = 0;
-        fits_update_key_dbl(fptr, "Gain", ControlN[CONTROL_GAIN].value, 3, "Gain", &status);
-        fits_update_key_dbl(fptr, "Offset", ControlN[CONTROL_OFFSET].value, 3, "Offset", &status);
+        fitsKeywords.push_back({"GAIN", ControlN[CONTROL_GAIN].value, 3, "Gain"});
+        fitsKeywords.push_back({"OFFSET", ControlN[CONTROL_OFFSET].value, 3, "Offset"});
     }
 }
 

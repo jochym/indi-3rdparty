@@ -28,6 +28,14 @@
 #define GP_UPLOAD_SDCARD 1
 #define GP_UPLOAD_ALL    2
 
+typedef enum
+{
+    SAVE_IMAGE,
+    DELETE_IMAGE,
+    IGNORE_IMAGE
+
+} CameraImageHandling;
+
 typedef struct
 {
     CameraWidget *widget;
@@ -89,7 +97,7 @@ int gphoto_get_iso_current(gphoto_driver *gphoto);
 gphoto_driver *gphoto_open(Camera *camera, GPContext *context, const char *model, const char *port,
                            const char *shutter_release_port);
 int gphoto_close(gphoto_driver *gphoto);
-void gphoto_get_buffer(gphoto_driver *gphoto, const char **buffer, size_t *size);
+void gphoto_get_buffer(gphoto_driver *gphoto, const char **buffer, unsigned long *size);
 void gphoto_free_buffer(gphoto_driver *gphoto);
 const char *gphoto_get_file_extension(gphoto_driver *gphoto);
 void gphoto_show_options(gphoto_driver *gphoto);
@@ -112,7 +120,7 @@ void gphoto_set_debug(const char *name);
 int gphoto_mirrorlock(gphoto_driver *gphoto, int msec);
 const char *gphoto_get_manufacturer(gphoto_driver *gphoto);
 const char *gphoto_get_model(gphoto_driver *gphoto);
-int gphoto_delete_sdcard_image(gphoto_driver *gphoto, bool delete_sdcard_image);
+int gphoto_handle_sdcard_image(gphoto_driver *gphoto, CameraImageHandling handling);
 bool gphoto_supports_temperature(gphoto_driver *gphoto);
 float gphoto_get_last_sensor_temperature(gphoto_driver *gphoto);
 void gphoto_force_bulb(gphoto_driver *gphoto, bool enabled);

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.16)
 PROJECT(indi_starbook CXX C)
 
 LIST(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake_modules/")
@@ -12,6 +12,12 @@ set(STARBOOK_DRIVER_VERSION_MINOR 8)
 find_package(INDI REQUIRED)
 find_package(CURL REQUIRED)
 find_package(Nova REQUIRED)
+
+if (CMAKE_VERSION VERSION_LESS 3.12.0)
+set(CURL ${CURL_LIBRARIES})
+else()
+set(CURL CURL::libcurl)
+endif()
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/config.h.cmake ${CMAKE_CURRENT_BINARY_DIR}/config.h)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/indi_starbook_telescope.xml.cmake ${CMAKE_CURRENT_BINARY_DIR}/indi_starbook_telescope.xml)
@@ -29,7 +35,7 @@ set(indi_starbook_SRCS ${CMAKE_CURRENT_SOURCE_DIR}/indi_starbook.cpp ${CMAKE_CUR
 
 add_executable(indi_starbook_telescope ${indi_starbook_SRCS} connectioncurl.cpp connectioncurl.h command_interface.cpp command_interface.h)
 
-target_link_libraries(indi_starbook_telescope ${INDI_LIBRARIES} ${NOVA_LIBRARIES} ${CURL_LIBRARIES})
+target_link_libraries(indi_starbook_telescope ${INDI_LIBRARIES} ${NOVA_LIBRARIES} ${CURL})
 
 install(TARGETS indi_starbook_telescope RUNTIME DESTINATION bin)
 
@@ -53,7 +59,7 @@ if (INDI_BUILD_UNITTESTS)
 
     #   test shouldn't be so dependent on external libs, but here we are
     target_link_libraries(test_starbook
-            ${INDI_LIBRARIES} ${NOVA_LIBRARIES} ${CURL_LIBRARIES} ${GTEST_BOTH_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT}
+            ${INDI_LIBRARIES} ${NOVA_LIBRARIES} ${CURL} ${GTEST_BOTH_LIBRARIES} ${CMAKE_THREAD_LIBS_INIT}
             )
 
     add_test(run-tests test_starbook)

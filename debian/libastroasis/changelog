@@ -1,0 +1,11 @@
+libastroasis (1.1.0) jammy; urgency=medium
+
+  * Add Oasis Filter Wheel driver library files.
+
+ -- Frank Chen <frank.chen@astroasis.com>  Sun, 1 Oct 2023 01:00:00 +0800
+
+libastroasis (1.0.5) jammy; urgency=medium
+
+  * Initial Release.
+
+ -- Jasem Mutlaq <mutlaqja@ikarustech.com>  Wed, 31 May 2023 12:00:00 +0300

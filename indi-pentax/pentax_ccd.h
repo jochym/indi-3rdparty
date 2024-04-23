@@ -67,6 +67,8 @@ protected:
     bool StartStreaming() override;
     bool StopStreaming() override;
 
+    bool SetCaptureFormat(uint8_t index) override;
+
     bool bufferIsBayered;
 
     string getUploadFilePrefix();
@@ -110,10 +112,7 @@ protected:
     float updateShutterSpeed(float requestedSpeed);
     void updateCaptureSetting(CaptureSetting *setting, string newiso);
 
-    ISwitchVectorProperty mIsoSP,mApertureSP,mExpCompSP,mWhiteBalanceSP,mIQualitySP,mFormatSP,mStorageWritingSP;
-
-    ISwitch transferFormatS[2];
-    ISwitchVectorProperty transferFormatSP;
+    ISwitchVectorProperty mIsoSP,mApertureSP,mExpCompSP,mWhiteBalanceSP,mIQualitySP,mStorageWritingSP;
 
     ISwitch preserveOriginalS[2];
     ISwitchVectorProperty preserveOriginalSP;
@@ -129,7 +128,7 @@ protected:
     bool saveConfigItems(FILE * fp) override;
 
     bool ISNewSwitch(const char * dev, const char * name, ISState * states, char * names[], int n) override;
-    void addFITSKeywords(fitsfile * fptr, INDI::CCDChip * targetChip) override;
+    void addFITSKeywords(INDI::CCDChip * targetChip, std::vector<INDI::FITSRecord> &fitsKeywords) override;
 
     void buildCaptureSettingSwitch(ISwitchVectorProperty *control, CaptureSetting *setting, const char *label = nullptr, const char *name = nullptr);
     void updateCaptureSettingSwitch(CaptureSetting *setting, ISwitchVectorProperty *sw, ISState *states, char *names[], int n);

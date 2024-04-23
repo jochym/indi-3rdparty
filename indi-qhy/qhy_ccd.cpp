@@ -169,7 +169,7 @@ bool QHYCCD::initProperties()
                        ISR_1OFMANY, 0, IPS_IDLE);
 
     // CCD Regulation power
-    IUFillNumber(&CoolerN[0], "CCD_COOLER_VALUE", "Cooling Power (%)", "%+06.2f", 0., 100., 5, 0.0);
+    IUFillNumber(&CoolerN[0], "CCD_COOLER_VALUE", "Cooling Power (%)", "%.2f", 0., 100., 5, 0.0);
     IUFillNumberVector(&CoolerNP, CoolerN, 1, getDeviceName(), "CCD_COOLER_POWER", "Cooling Power", MAIN_CONTROL_TAB,
                        IP_RO, 60, IPS_IDLE);
 
@@ -320,7 +320,7 @@ bool QHYCCD::initProperties()
     IUFillTextVector(&GPSDataNowTP, GPSDataNowT, 4, getDeviceName(), "GPS_DATA_NOW", "Now", GPS_DATA_TAB, IP_RO, 60, IPS_IDLE);
 
     addAuxControls();
-    setDriverInterface(getDriverInterface() | FILTER_INTERFACE);
+    setDriverInterface(getDriverInterface());
 
     return true;
 }
@@ -403,6 +403,22 @@ void QHYCCD::ISGetProperties(const char *dev)
 
 bool QHYCCD::updateProperties()
 {
+    // Set format first if connected.
+    if (isConnected())
+    {
+        // N.B. AFAIK, there is no way to switch image formats.
+        CaptureFormat format;
+        if (GetCCDCapability() & CCD_HAS_BAYER)
+        {
+            format = {"INDI_RAW", "RAW", 16, true};
+        }
+        else
+        {
+            format = {"INDI_MONO", "Mono", 16, true};
+        }
+        addCaptureFormat(format);
+    }
+
     // Define parent class properties
     INDI::CCD::updateProperties();
 
@@ -757,6 +773,31 @@ bool QHYCCD::Connect()
         IUSaveText(&SDKVersionT[0], versionInfo.str().c_str());
 
         ////////////////////////////////////////////////////////////////////
+        /// Bin Modes
+        ////////////////////////////////////////////////////////////////////
+
+        m_SupportedBins[Bin1x1] = IsQHYCCDControlAvailable(m_CameraHandle, CAM_BIN1X1MODE) == QHYCCD_SUCCESS;
+        m_SupportedBins[Bin2x2] = IsQHYCCDControlAvailable(m_CameraHandle, CAM_BIN2X2MODE) == QHYCCD_SUCCESS;
+        m_SupportedBins[Bin3x3] = IsQHYCCDControlAvailable(m_CameraHandle, CAM_BIN3X3MODE) == QHYCCD_SUCCESS;
+        m_SupportedBins[Bin4x4] = IsQHYCCDControlAvailable(m_CameraHandle, CAM_BIN4X4MODE) == QHYCCD_SUCCESS;
+
+        auto supported = std::any_of(m_SupportedBins + 1, m_SupportedBins + 4, [](bool value)
+        {
+            return value;
+        });
+
+        if (supported)
+            cap |= CCD_CAN_BIN;
+
+        LOGF_INFO("Binning Control: %s", supported ? "True" : "False");
+        if (supported)
+        {
+            LOGF_DEBUG("Bin2x2: %s, Bin3x3: %s, Bin4x4: %s", m_SupportedBins[Bin2x2] ? "true" : "false",
+                       m_SupportedBins[Bin3x3] ? "true" : "false",
+                       m_SupportedBins[Bin4x4] ? "true" : "false");
+        }
+
+        ////////////////////////////////////////////////////////////////////
         /// Read Modes
         ////////////////////////////////////////////////////////////////////
         ret = GetQHYCCDNumberOfReadModes(m_CameraHandle, &numReadModes);
@@ -901,37 +942,62 @@ bool QHYCCD::Connect()
         ////////////////////////////////////////////////////////////////////
         /// Filter Wheel Support
         ////////////////////////////////////////////////////////////////////
-        ret = IsQHYCCDControlAvailable(m_CameraHandle, CONTROL_CFWPORT);
-        if (ret == QHYCCD_SUCCESS)
-        {
-            HasFilters = true;
 
-            m_MaxFilterCount = GetQHYCCDParam(m_CameraHandle, CONTROL_CFWSLOTSNUM);
-            LOGF_DEBUG("Filter Count (CONTROL_CFWSLOTSNUM): %d", m_MaxFilterCount);
-            // If we get invalid value, check again in 0.5 sec
-            if (m_MaxFilterCount > 16)
+        HasFilters = false;
+        //Using new SDK query
+        // N.B. JM 2022.09.18: Still must retry multiple times as sometimes the filter is not picked up
+        for (int i = 0; i < 3; i++)
+        {
+            ret = IsQHYCCDCFWPlugged(m_CameraHandle);
+            if (ret == QHYCCD_SUCCESS)
             {
-                usleep(500000);
+                HasFilters = true;
                 m_MaxFilterCount = GetQHYCCDParam(m_CameraHandle, CONTROL_CFWSLOTSNUM);
                 LOGF_DEBUG("Filter Count (CONTROL_CFWSLOTSNUM): %d", m_MaxFilterCount);
+                // If we get invalid value, check again in 0.5 sec
+                if (m_MaxFilterCount > 16)
+                {
+                    usleep(500000);
+                    m_MaxFilterCount = GetQHYCCDParam(m_CameraHandle, CONTROL_CFWSLOTSNUM);
+                    LOGF_DEBUG("Filter Count (CONTROL_CFWSLOTSNUM): %d", m_MaxFilterCount);
+                }
+
+                if (m_MaxFilterCount > 16)
+                {
+                    LOG_DEBUG("Camera can support CFW but no filters are present.");
+                    m_MaxFilterCount = -1;
+                    HasFilters = false;
+                }
+
+                if (m_MaxFilterCount > 0)
+                {
+                    HasFilters = true;
+                    char currentPos[MAXINDINAME] = {0};
+                    if (GetQHYCCDCFWStatus(m_CameraHandle, currentPos) == QHYCCD_SUCCESS)
+                    {
+                        CurrentFilter = strtol(currentPos, nullptr, 16) + 1;
+                        FilterSlotN[0].value = CurrentFilter;
+                    }
+
+                    updateFilterProperties();
+                    LOGF_INFO("Filter Count (CONTROL_CFWSLOTSNUM): %d", m_MaxFilterCount);
+                }
+                else
+                {
+                    HasFilters = false;
+                }
+
+                break;
             }
 
-            if (m_MaxFilterCount > 16)
-            {
-                LOG_DEBUG("Camera can support CFW but no filters are present.");
-                m_MaxFilterCount = -1;
-            }
-
-            if (m_MaxFilterCount > 0)
-                updateFilterProperties();
-            else
-                HasFilters = false;
+            std::this_thread::sleep_for(std::chrono::milliseconds(200));
         }
 
-        if (HasFilters)
+        if (HasFilters == true)
+        {
             setDriverInterface(getDriverInterface() | FILTER_INTERFACE);
-        else
-            setDriverInterface(getDriverInterface() & ~FILTER_INTERFACE);
+            syncDriverInfo();
+        }
         LOGF_DEBUG("Has Filters: %s", HasFilters ? "True" : "False");
 
         ////////////////////////////////////////////////////////////////////
@@ -940,21 +1006,6 @@ bool QHYCCD::Connect()
         ret = IsQHYCCDControlAvailable(m_CameraHandle, CONTROL_TRANSFERBIT);
         HasTransferBit = (ret == QHYCCD_SUCCESS);
         LOGF_DEBUG("Has Transfer Bit control? %s", HasTransferBit ? "True" : "False");
-
-        // Using software binning
-        cap |= CCD_CAN_BIN;
-
-        ret = IsQHYCCDControlAvailable(m_CameraHandle, CAM_BIN1X1MODE);
-        LOGF_DEBUG("Bin 1x1: %s", (ret == QHYCCD_SUCCESS) ? "True" : "False");
-
-        ret &= IsQHYCCDControlAvailable(m_CameraHandle, CAM_BIN2X2MODE);
-        ret &= IsQHYCCDControlAvailable(m_CameraHandle, CAM_BIN3X3MODE);
-        ret &= IsQHYCCDControlAvailable(m_CameraHandle, CAM_BIN4X4MODE);
-
-        // Only use software binning if NOT supported by hardware
-        //useSoftBin = !(ret == QHYCCD_SUCCESS);
-
-        LOGF_DEBUG("Binning Control: %s", (cap & CCD_CAN_BIN) ? "True" : "False");
 
         ////////////////////////////////////////////////////////////////////
         /// USB Traffic Control Support
@@ -978,26 +1029,28 @@ bool QHYCCD::Connect()
         //if(ret != QHYCCD_ERROR && ret != QHYCCD_ERROR_NOTSUPPORT)
         if (ret != QHYCCD_ERROR)
         {
-            if (ret == BAYER_GB){
+            if (ret == BAYER_GB)
+            {
                 IUSaveText(&BayerT[2], "GBRG");
                 cap |= CCD_HAS_BAYER;
             }
-            else if (ret == BAYER_GR){
+            else if (ret == BAYER_GR)
+            {
                 IUSaveText(&BayerT[2], "GRBG");
                 cap |= CCD_HAS_BAYER;
             }
-            else if (ret == BAYER_BG){
+            else if (ret == BAYER_BG)
+            {
                 IUSaveText(&BayerT[2], "BGGR");
                 cap |= CCD_HAS_BAYER;
             }
-            else if (ret == BAYER_RG){
+            else if (ret == BAYER_RG)
+            {
                 IUSaveText(&BayerT[2], "RGGB");
                 cap |= CCD_HAS_BAYER;
             }
 
             LOGF_DEBUG("Color camera: %s", BayerT[2].text);
-
-            
         }
 
         ////////////////////////////////////////////////////////////////////
@@ -1410,36 +1463,18 @@ bool QHYCCD::UpdateCCDFrame(int x, int y, int w, int h)
 
 bool QHYCCD::UpdateCCDBin(int hor, int ver)
 {
-    int ret = QHYCCD_ERROR;
-
     if (hor != ver)
     {
         LOG_ERROR("Invalid binning mode. Asymmetrical binning not supported.");
         return false;
     }
-
-    if (hor == 3)
+    else if (hor > 4 || ver > 4)
     {
-        LOG_ERROR("Invalid binning mode. Only 1x1, 2x2, and 4x4 binning modes supported.");
+        LOG_ERROR("Invalid binning mode. Maximum theoritical binning is 4x4");
         return false;
     }
 
-    if (hor == 1 && ver == 1)
-    {
-        ret = IsQHYCCDControlAvailable(m_CameraHandle, CAM_BIN1X1MODE);
-    }
-    else if (hor == 2 && ver == 2)
-    {
-        ret = IsQHYCCDControlAvailable(m_CameraHandle, CAM_BIN2X2MODE);
-    }
-    else if (hor == 3 && ver == 3)
-    {
-        ret = IsQHYCCDControlAvailable(m_CameraHandle, CAM_BIN3X3MODE);
-    }
-    else if (hor == 4 && ver == 4)
-    {
-        ret = IsQHYCCDControlAvailable(m_CameraHandle, CAM_BIN4X4MODE);
-    }
+    auto supported = m_SupportedBins[hor - 1];
 
     // Binning ALWAYS succeeds
 #if 0
@@ -1453,7 +1488,7 @@ bool QHYCCD::UpdateCCDBin(int hor, int ver)
     PrimaryCCD.getBinY() = 1;
 #endif
 
-    if (ret != QHYCCD_SUCCESS)
+    if (!supported)
     {
         LOGF_ERROR("%dx%d binning is not supported.", hor, ver);
         return false;
@@ -2565,10 +2600,15 @@ void QHYCCD::streamVideo()
         guard.unlock();
         if (ret == QHYCCD_SUCCESS)
         {
-            Streamer->newFrame(buffer, w * h * bpp / 8 * channels);
-
+            uint64_t timestamp = 0;
             if (HasGPS && GPSControlS[INDI_ENABLED].s == ISS_ON)
+            {
                 decodeGPSHeader();
+                timestamp = (uint64_t)GPSHeader.start_sec * 1e6;
+                timestamp += GPSHeader.start_us + QHY_SER_US_EPOCH;
+            }
+
+            Streamer->newFrame(buffer, w * h * bpp / 8 * channels, timestamp);
 
             //DEBUG
             //if(!frames)
@@ -2648,7 +2688,8 @@ void QHYCCD::debugTriggered(bool enable)
 {
     // For some reason QHYSDK does not define this for MacOS! Needs to be fixed
 #ifdef __linux__
-    SetQHYCCDLogFunction(m_QHYLogCallback);
+    // JM QHY removed this function on 2023.07.16
+    //SetQHYCCDLogFunction(m_QHYLogCallback);
 #endif
     if (enable)
         SetQHYCCDLogLevel(5);
@@ -2696,85 +2737,84 @@ bool QHYCCD::updateFilterProperties()
     return false;
 }
 
-void QHYCCD::addFITSKeywords(fitsfile *fptr, INDI::CCDChip *targetChip)
+void QHYCCD::addFITSKeywords(INDI::CCDChip *targetChip, std::vector<INDI::FITSRecord> &fitsKeywords)
 {
-    INDI::CCD::addFITSKeywords(fptr, targetChip);
-    int status = 0;
+    INDI::CCD::addFITSKeywords(targetChip, fitsKeywords);
 
     if (HasGain)
     {
-        fits_update_key_dbl(fptr, "Gain", GainN[0].value, 3, "Gain", &status);
+        fitsKeywords.push_back({"GAIN", GainN[0].value, 3, "Gain"});
     }
 
     if (HasOffset)
     {
-        fits_update_key_dbl(fptr, "Offset", OffsetN[0].value, 3, "Offset", &status);
+        fitsKeywords.push_back({"OFFSET", OffsetN[0].value, 3, "Offset"});
     }
 
     if (HasAmpGlow)
     {
-        fits_update_key_str(fptr, "Ampglow", IUFindOnSwitch(&AMPGlowSP)->label, "Mode", &status);
+        fitsKeywords.push_back({"AMPGLOW", IUFindOnSwitch(&AMPGlowSP)->label, "Mode"});
     }
 
     if (HasReadMode)
     {
-        fits_update_key_dbl(fptr, "ReadMode", ReadModeN[0].value, 1, "Read Mode", &status);
+        fitsKeywords.push_back({"READMODE", ReadModeN[0].value, 1, "Read Mode"});
     }
 
     if (HasGPS)
     {
         // #1 Start
         // ## Flag
-        fits_update_key_dbl(fptr, "GPS_SFlg", GPSHeader.start_flag, 0, "StartFlag", &status);
+        fitsKeywords.push_back({"GPS_SFLG", GPSHeader.start_flag, "StartFlag"});
         // ## Seconds
-        fits_update_key_lng(fptr, "GPS_SS", GPSHeader.start_sec, "StartShutterSeconds", &status);
+        fitsKeywords.push_back({"GPS_SS", GPSHeader.start_sec, "StartShutterSeconds"});
         // ## Microseconds
-        fits_update_key_dbl(fptr, "GPS_SU", GPSHeader.start_us, 3, "StartShutterMicroSeconds", &status);
+        fitsKeywords.push_back({"GPS_SU", GPSHeader.start_us, 3, "StartShutterMicroSeconds"});
         // ## Time
-        fits_update_key_str(fptr, "GPS_ST", GPSDataStartT[GPS_DATA_START_TS].text, "StartShutterTime", &status);
+        fitsKeywords.push_back({"GPS_ST", GPSDataStartT[GPS_DATA_START_TS].text, "StartShutterTime"});
 
         // #2 End
         // ## Flag
-        fits_update_key_dbl(fptr, "GPS_EFlg", GPSHeader.end_flag, 0, "EndFlag", &status);
+        fitsKeywords.push_back({"GPS_EFLG", GPSHeader.end_flag, "EndFlag"});
         // ## Seconds
-        fits_update_key_lng(fptr, "GPS_ES", GPSHeader.end_sec, "EndShutterSeconds", &status);
+        fitsKeywords.push_back({"GPS_ES", GPSHeader.end_sec, "EndShutterSeconds"});
         // ## Microseconds
-        fits_update_key_dbl(fptr, "GPS_EU", GPSHeader.end_us, 3, "EndShutterMicroSeconds", &status);
+        fitsKeywords.push_back({"GPS_EU", GPSHeader.end_us, 3, "EndShutterMicroSeconds"});
         // ## Time
-        fits_update_key_str(fptr, "GPS_ET", GPSDataStartT[GPS_DATA_END_TS].text, "EndShutterTime", &status);
+        fitsKeywords.push_back({"GPS_ET", GPSDataStartT[GPS_DATA_END_TS].text, "EndShutterTime"});
 
         // #3 Now
         // ## Flag
-        fits_update_key_dbl(fptr, "GPS_NFlg", GPSHeader.now_flag, 0, "NowFlag", &status);
+        fitsKeywords.push_back({"GPS_NFLG", GPSHeader.now_flag, "NowFlag"});
         // ## Seconds
-        fits_update_key_lng(fptr, "GPS_NS", GPSHeader.now_sec, "NowShutterSeconds", &status);
+        fitsKeywords.push_back({"GPS_NS", GPSHeader.now_sec, "NowShutterSeconds"});
         // ## Microseconds
-        fits_update_key_dbl(fptr, "GPS_NU", GPSHeader.now_us, 3, "NowShutterMicroSeconds", &status);
+        fitsKeywords.push_back({"GPS_NU", GPSHeader.now_us, 3, "NowShutterMicroSeconds"});
         // ## Time
-        fits_update_key_str(fptr, "GPS_NT", GPSDataStartT[GPS_DATA_NOW_TS].text, "NowShutterTime", &status);
+        fitsKeywords.push_back({"GPS_NT", GPSDataStartT[GPS_DATA_NOW_TS].text, "NowShutterTime"});
 
         // PPS Counter
-        fits_update_key_lng(fptr, "GPS_PPSC", GPSHeader.max_clock, "PPSCounter", &status);
+        fitsKeywords.push_back({"GPS_PPSC", GPSHeader.max_clock, "PPSCounter"});
 
         // GPS Status
 
         // System Clock Offset
-        //fits_update_key_dbl(fptr, "GPS_DSYS", GPSHeader.now_us, 6, "System Clock - GPS Clock Offset (s)", &status);
+        //fitsKeywords.push_back({"GPS_DSYS", GPSHeader.now_us, 6, "System Clock - GPS Clock Offset (s)"});
 
         // Time Offset Stable for
-        //fits_update_key_lng(fptr, "GPS_DSTB", GPSHeader.max_clock, "Time Offset Stable for (s)", &status);
+        //fitsKeywords.push_back({"GPS_DSTB", GPSHeader.max_clock, "Time Offset Stable for (s)"});
 
         // Longitude
-        fits_update_key_dbl(fptr, "GPS_LONG", GPSHeader.longitude, 3, "GPS Longitude", &status);
+        fitsKeywords.push_back({"GPS_LONG", GPSHeader.longitude, 7, "GPS Longitude"});
 
         // Latitude
-        fits_update_key_dbl(fptr, "GPS_LAT", GPSHeader.latitude, 3, "GPS Latitude", &status);
+        fitsKeywords.push_back({"GPS_LAT", GPSHeader.latitude, 7, "GPS Latitude"});
 
         // Sequence Number
-        fits_update_key_lng(fptr, "GPS_Seq", GPSHeader.seqNumber, "Sequence Number", &status);
+        fitsKeywords.push_back({"GPS_SEQ", GPSHeader.seqNumber, "Sequence Number"});
 
         // Temperorary Sequence Number
-        fits_update_key_lng(fptr, "GPS_Tmp", GPSHeader.tempNumber, "Temporary Sequence Number", &status);
+        fitsKeywords.push_back({"GPS_TMP", GPSHeader.tempNumber, "Temporary Sequence Number"});
     }
 
 }
@@ -2814,13 +2854,21 @@ void QHYCCD::decodeGPSHeader()
     IUSaveText(&GPSDataHeaderT[GPS_DATA_HEIGHT], data);
 
     // Latitude
-    GPSHeader.latitude = gpsarray[9] << 24 | gpsarray[10] << 16 | gpsarray[11] << 8 | gpsarray[12];
-    snprintf(data, 64, "%u", GPSHeader.latitude);
+    uint32_t latitude = gpsarray[9] << 24 | gpsarray[10] << 16 | gpsarray[11] << 8 | gpsarray[12];
+    // convert SDDMMMMMMM to DD.DDDDDDD
+    GPSHeader.latitude = (latitude % 1000000000) / 10000000;
+    GPSHeader.latitude += (latitude % 10000000) / 6000000.0;
+    GPSHeader.latitude *= latitude > 1000000000 ? -1.0 : 1.0;
+    snprintf(data, 64, "%f", GPSHeader.latitude);
     IUSaveText(&GPSDataHeaderT[GPS_DATA_LATITUDE], data);
 
     // Longitude
-    GPSHeader.longitude = gpsarray[13] << 24 | gpsarray[14] << 16 | gpsarray[15] << 8 | gpsarray[16];
-    snprintf(data, 64, "%u", GPSHeader.longitude);
+    uint32_t longitude = gpsarray[13] << 24 | gpsarray[14] << 16 | gpsarray[15] << 8 | gpsarray[16];
+    // convert SDDDMMMMMM to DDD.DDDDDDD
+    GPSHeader.longitude = (longitude % 1000000000) / 1000000;
+    GPSHeader.longitude += (longitude % 1000000) / 600000.0;
+    GPSHeader.longitude *= longitude > 1000000000 ? -1.0 : 1.0;
+    snprintf(data, 64, "%f", GPSHeader.longitude);
     IUSaveText(&GPSDataHeaderT[GPS_DATA_LONGITUDE], data);
 
     // Start Flag

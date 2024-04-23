@@ -1,3 +1,161 @@
+libasi (1.34) jammy; urgency=medium
+
+  * ASI Camera SDK 1.34 release. Change log:
+
+    New Features
+    1. USBHub control for some cooling cameras.
+
+    Bug fix
+    1. Fixed some issues.
+
+ -- Jarno Paananen <jarno.paananen@gmail.com>  Fri, 29 Mar 2024 18:57:40 +0200
+
+libasi (1.33) jammy; urgency=medium
+
+  * ASI Camera SDK 1.33 release. Change log:
+
+    Bug fix
+    1. Fixed the issue where some camera's fans do not rotate when they are cooling.
+
+ -- Jarno Paananen <jarno.paananen@gmail.com>  Tue, 26 Dec 2023 03:27:56 +0200
+
+libasi (1.32) jammy; urgency=medium
+
+  * ASI Camera SDK 1.32 release. Change log for this and couple of
+    previous versions.
+
+    1.32:
+    New Features
+      1. Can remember the last state of cooling camera's fan speed and LED
+         state.
+    Optimization
+      1. ASI2600 linearity of image brightness in long exposure state.
+      2. ASI120 Mini no longer supports overclocking feature.
+      3. Maximum number of supported camera models changed to 256
+    Bug fix
+      1. In rare cases, two different ASI cameras are recognized as the same
+         camera.
+      2. ASI2600 has no image in high speed mode.
+      3. GPS time of GPS cameras is inaccurate in individual cases.
+      4. ASI664/ASI715 has no image under certain exposure times in hardware
+         Bin2 state.
+      5. ASI2600 drops frames in high speed mode when transmitting data via
+         USB2.0.
+
+    1.31:
+    New Features
+      1. Add ASI664MC,ASI715MC.
+      2. Add fan speed control and LED light control for cooler cameras.
+      3. For customized cameras, GPS functionality has been added.
+    Bug fix
+      1. fixed the bug of ASI220Mini's brightness on high gain.
+
+    1.30:
+    Bug fix
+      1. Fix low frame rate problem in ASI462MM high-speed mode.
+
+ -- Jarno Paananen <jarno.paananen@gmail.com>  Fri, 01 Dec 2023 22:00:46 +0200
+
+libasi (1.31) jammy; urgency=medium
+
+  * ASI Camera SDK 1.31 release. No change log posted.
+
+ -- Jarno Paananen <jarno.paananen@gmail.com>  Sat, 28 Oct 2023 15:02:26 +0300
+
+libasi (1.30) jammy; urgency=medium
+
+  * ASI Camera SDK 1.30 release. No change log posted.
+
+ -- Jarno Paananen <jarno.paananen@gmail.com>  Wed, 20 Sep 2023 22:22:30 +0300
+
+libasi (1.29) jammy; urgency=medium
+
+  * ASI Camera SDK 1.29 release. No change log posted.
+
+ -- Jarno Paananen <jarno.paananen@gmail.com>  Wed, 03 May 2023 22:48:55 +0300
+
+libasi (1.28) jammy; urgency=medium
+
+  * ASI Camera SDK 1.28 release. Changelog:
+    V1.28 2023.1.12
+    (1) Add ASI990-MM Pro,ASI462MM
+    (2) Some optimizations have been made
+
+ -- Jarno Paananen <jarno.paananen@gmail.com>  Tue, 07 Feb 2023 22:46:29 +0200
+
+libasi (1.27) jammy; urgency=medium
+
+  * ASI Camera SDK 1.27 release. Changelog:
+    V1.27 2022.11.28
+    (1) Add ASI220 Mini ASI461MM
+    (2) Some optimizations have been made    
+
+ -- Jasem Mutlaq <mutlaqja@ikarustech.com>  Wed, 30 Nov 2022 18:00:00 +0300
+
+libasi (1.26) jammy; urgency=medium
+
+  * ASI Camera SDK 1.26 release. Changelog:
+    V1.26 2022.8.4
+    (1) Fixed the bug of ASI432
+    (2) Optimized the middle gain of 432;411;461;585;662;678;2600;6200
+    (3) Fixed the crash problem on ARMV8
+
+ -- Jarno Paananen <jarno.paananen@gmail.com>  Fri, 05 Aug 2022 14:18:30 +0300
+
+libasi (1.24) buster; urgency=medium
+
+  * ASI Camera SDK 1.25 release. Changelog including updated entry for
+    1.24:
+
+    V1.25 2022.7.20
+    Optimize the performance of ASI432
+
+    V1.24 2022.6.23
+    (1) Add ASI585,ASI432,ASI662,ASI678
+    (2) The camera name from ASIGetCameraProperty no longer contains
+    alias. If the application software needs to display alias, it needs to
+    obtain them through the ASIGetID method.
+    (3) Some optimizations have been made
+
+ -- Jarno Paananen <jarno.paananen@gmail.com>  Mon, 25 Jul 2022 23:55:58 +0300
+
+libasi (1.23) buster; urgency=medium
+
+  * ASI Camera SDK 1.24 release. Changelog including older entries:
+    V1.24 2022.6.23
+    (1) Add new cameras
+    (2) The camera name from ASIGetCameraProperty no longer contains alias.
+    If the application software needs to display alias, it needs to obtain
+    them through the ASIGetID method.
+    (3) Some optimizations have been made
+
+    V1.23 2022.5.13
+    (1) Fixed some bugs
+
+    V1.22 2022.3.10
+    (1) Add: The interface ASICameraCheck is added to replace 
+    ASIGetProductIDs, which will be discarded soon
+    (2) Fixed bug: 294MM cann't load image  in some cases
+    (3) Fixed bug: 294MM get bad images in 1s exposure under USB2.0
+    (4) Optimized: Maximum frame rate of 174
+    (5) More bug fixes and optimizations
+
+    V1.21 2022.1.17
+    (1) Add new cameras
+    (2) Some optimizations have been made
+
+    V1.20.3 2021.11.16
+    (1) Fix bug: When two cameras are turned on at the same time, turn off
+    one camera and the other camera may crash.
+    (2) Fix bug: At the snap mode of 120S cameras, when change BIN1 to
+    BIN2, there may be no image upload.
+    (3) Other bug fixes and feature optimization.
+
+    V1.20.2 2021.10.21
+    Some optimizations have been made
+
+ -- Jarno Paananen <jarno.paananen@gmail.com>  Sun, 03 Jul 2022 21:56:46 +0300
+
 libasi (1.22) buster; urgency=medium
 
   * ASI Camera SDK 1.20.2 release. No changelog entry from ZWO.

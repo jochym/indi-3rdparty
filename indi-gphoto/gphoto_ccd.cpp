@@ -29,6 +29,7 @@
 #include <algorithm>
 #include <stream/streammanager.h>
 
+#include <sharedblob.h>
 #include <deque>
 #include <memory>
 #include <math.h>
@@ -254,19 +255,12 @@ bool GPhotoCCD::initProperties()
     //We don't know how many items will be in the switch yet
     IUFillSwitchVector(&mIsoSP, nullptr, 0, getDeviceName(), "CCD_ISO", "ISO", IMAGE_SETTINGS_TAB, IP_RW, ISR_1OFMANY, 60,
                        IPS_IDLE);
-    IUFillSwitchVector(&mFormatSP, nullptr, 0, getDeviceName(), "CAPTURE_FORMAT", "Capture Format", IMAGE_SETTINGS_TAB,
-                       IP_RW, ISR_1OFMANY, 60, IPS_IDLE);
     IUFillSwitchVector(&mExposurePresetSP, nullptr, 0, getDeviceName(), "CCD_EXPOSURE_PRESETS", "Presets",
                        MAIN_CONTROL_TAB, IP_RW, ISR_1OFMANY, 60, IPS_IDLE);
 
     IUFillSwitch(&autoFocusS[0], "Set", "", ISS_OFF);
     IUFillSwitchVector(&autoFocusSP, autoFocusS, 1, getDeviceName(), "Auto Focus", "", FOCUS_TAB, IP_RW, ISR_1OFMANY, 0,
                        IPS_IDLE);
-
-    IUFillSwitch(&TransferFormatS[FORMAT_FITS], "FORMAT_FITS", "FITS", ISS_ON);
-    IUFillSwitch(&TransferFormatS[FORMAT_NATIVE], "FORMAT_NATIVE", "Native", ISS_OFF);
-    IUFillSwitchVector(&TransferFormatSP, TransferFormatS, 2, getDeviceName(), "CCD_TRANSFER_FORMAT", "Transfer Format",
-                       IMAGE_SETTINGS_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
 
     IUFillSwitch(&livePreviewS[0], "Enable", "", ISS_OFF);
     IUFillSwitch(&livePreviewS[1], "Disable", "", ISS_ON);
@@ -282,7 +276,8 @@ bool GPhotoCCD::initProperties()
 
     IUFillSwitch(&SDCardImageS[SD_CARD_SAVE_IMAGE], "Save", "", ISS_ON);
     IUFillSwitch(&SDCardImageS[SD_CARD_DELETE_IMAGE], "Delete", "", ISS_OFF);
-    IUFillSwitchVector(&SDCardImageSP, SDCardImageS, 2, getDeviceName(), "CCD_SD_CARD_ACTION", "SD Image",
+    IUFillSwitch(&SDCardImageS[SD_CARD_IGNORE_IMAGE], "Ignore", "", ISS_OFF);
+    IUFillSwitchVector(&SDCardImageSP, SDCardImageS, 3, getDeviceName(), "CCD_SD_CARD_ACTION", "SD Image",
                        IMAGE_SETTINGS_TAB, IP_RW, ISR_1OFMANY, 0, IPS_IDLE);
 
     // Nikon should have force bulb off by default.
@@ -302,9 +297,9 @@ bool GPhotoCCD::initProperties()
     IUSaveText(&BayerT[2], "RGGB");
 
 #ifdef HAVE_WEBSOCKET
-    SetCCDCapability(CCD_CAN_SUBFRAME | CCD_CAN_ABORT | CCD_HAS_BAYER | CCD_HAS_STREAMING | CCD_HAS_WEB_SOCKET);
+    SetCCDCapability(CCD_CAN_SUBFRAME | CCD_CAN_BIN | CCD_CAN_ABORT | CCD_HAS_BAYER | CCD_HAS_STREAMING | CCD_HAS_WEB_SOCKET);
 #else
-    SetCCDCapability(CCD_CAN_SUBFRAME | CCD_CAN_ABORT | CCD_HAS_BAYER | CCD_HAS_STREAMING);
+    SetCCDCapability(CCD_CAN_SUBFRAME | CCD_CAN_BIN | CCD_CAN_ABORT | CCD_HAS_BAYER | CCD_HAS_STREAMING);
 #endif
 
     Streamer->setStreamingExposureEnabled(false);
@@ -378,11 +373,8 @@ bool GPhotoCCD::updateProperties()
             defineProperty(&mExposurePresetSP);
         if (mIsoSP.nsp > 0)
             defineProperty(&mIsoSP);
-        if (mFormatSP.nsp > 0)
-            defineProperty(&mFormatSP);
 
         defineProperty(&livePreviewSP);
-        defineProperty(&TransferFormatSP);
         defineProperty(&autoFocusSP);
 
         if (m_CanFocus)
@@ -396,7 +388,6 @@ bool GPhotoCCD::updateProperties()
         defineProperty(&SDCardImageSP);
 
         imageBP = getBLOB("CCD1");
-        imageB  = imageBP->bp;
 
         // Dummy values until first capture is done
         //SetCCDParams(1280, 1024, 8, 5.4, 5.4);
@@ -430,13 +421,10 @@ bool GPhotoCCD::updateProperties()
             deleteProperty(mExposurePresetSP.name);
         if (mIsoSP.nsp > 0)
             deleteProperty(mIsoSP.name);
-        if (mFormatSP.nsp > 0)
-            deleteProperty(mFormatSP.name);
 
         deleteProperty(mMirrorLockNP.name);
         deleteProperty(livePreviewSP.name);
         deleteProperty(autoFocusSP.name);
-        deleteProperty(TransferFormatSP.name);
 
         if (m_CanFocus)
             FI::updateProperties();
@@ -512,7 +500,20 @@ bool GPhotoCCD::ISNewText(const char * dev, const char * name, char * texts[], c
 
             if (IUUpdateText(&opt->prop.text, texts, names, n) < 0)
                 return false;
-            gphoto_set_widget_text(gphotodrv, opt->widget, texts[0]);
+            char *text = texts[0];
+            char buf[256];
+            if(strcmp("eoszoomposition", name) == 0)
+            {
+                int x = 0, y = 0;
+                LOGF_DEBUG("%s %s", name, text);
+                sscanf(text, "%d,%d", &x, &y);
+                x *= 5;
+                y *= 5;
+                sprintf(buf, "%d,%d", x, y);
+                text = buf;
+                LOGF_DEBUG("%s adjusted %s %s (%d,%d)", name, text, buf, x, y);
+            }
+            gphoto_set_widget_text(gphotodrv, opt->widget, text);
             opt->prop.num.s = IPS_OK;
             IDSetText(&opt->prop.text, nullptr);
             return true;
@@ -606,53 +607,6 @@ bool GPhotoCCD::ISNewSwitch(const char * dev, const char * name, ISState * state
             return true;
         }
 
-        // Formats
-        if (!strcmp(name, mFormatSP.name))
-        {
-            int prevSwitch = IUFindOnSwitchIndex(&mFormatSP);
-            if (IUUpdateSwitch(&mFormatSP, states, names, n) < 0)
-                return false;
-
-            ISwitch * sp = IUFindOnSwitch(&mFormatSP);
-            if (sp)
-            {
-                if (strstr(sp->label, "+"))
-                {
-                    LOGF_ERROR("%s format is not supported.", sp->label);
-                    IUResetSwitch(&mFormatSP);
-                    mFormatSP.s                = IPS_ALERT;
-                    mFormatSP.sp[prevSwitch].s = ISS_ON;
-                    IDSetSwitch(&mFormatSP, nullptr);
-                    return false;
-                }
-            }
-            for (int i = 0; i < mFormatSP.nsp; i++)
-            {
-                if (mFormatS[i].s == ISS_ON)
-                {
-                    if (isSimulation() == false)
-                        gphoto_set_format(gphotodrv, i);
-                    mFormatSP.s = IPS_OK;
-                    IDSetSwitch(&mFormatSP, nullptr);
-                    // We need to get frame W and H if format changes
-                    frameInitialized = false;
-                    break;
-                }
-            }
-        }
-
-        // How images are transferred to the client
-        if (!strcmp(name, TransferFormatSP.name))
-        {
-            IUUpdateSwitch(&TransferFormatSP, states, names, n);
-            TransferFormatSP.s = IPS_OK;
-            IDSetSwitch(&TransferFormatSP, nullptr);
-            // We need to get frame W and H if transfer format changes
-            // 2017-01-17: Do we? transform format change should not affect W and H
-            //frameInitialized = false;
-            return true;
-        }
-
         // Autofocus
         if (!strcmp(name, autoFocusSP.name))
         {
@@ -728,23 +682,42 @@ bool GPhotoCCD::ISNewSwitch(const char * dev, const char * name, ISState * state
 
         if (!strcmp(SDCardImageSP.name, name))
         {
-            const char * onSwitch = IUFindOnSwitchName(states, names, n);
-            bool delete_sdcard_image = (!strcmp(onSwitch, SDCardImageS[SD_CARD_DELETE_IMAGE].name));
-            int ret = gphoto_delete_sdcard_image(gphotodrv, delete_sdcard_image);
-
-            if (ret == GP_OK)
+            IUUpdateSwitch(&SDCardImageSP, states, names, n);
+            SDCardImageSP.s = IPS_OK;
+            const auto index = IUFindOnSwitchIndex(&SDCardImageSP);
+            switch (index)
             {
-                SDCardImageSP.s = IPS_OK;
-                IUUpdateSwitch(&SDCardImageSP, states, names, n);
-                LOGF_WARN("All images and folders shall be %s the camera SD card after capture if capture target is set to SD Card.",
-                          delete_sdcard_image ? "deleted from" : "saved in");
-            }
-            else
-            {
-                SDCardImageSP.s = IPS_ALERT;
-                LOG_INFO("Failed to set SD card action.");
+                case SD_CARD_SAVE_IMAGE:
+                    LOG_INFO("Images downloaded from camera will saved in the camera internal storage.");
+                    break;
+                case SD_CARD_DELETE_IMAGE:
+                    LOG_INFO("Images downloaded from camera will not be stored on the camera internal storage.");
+                    break;
+                case SD_CARD_IGNORE_IMAGE:
+                    LOG_INFO("Images should only remain in the camera internal storage and will not be downloaded at all.");
+
+                    // Upload mode should always be local, no images uploaded.
+                    if (UploadS[UPLOAD_LOCAL].s != ISS_ON)
+                    {
+                        IUResetSwitch(&UploadSP);
+                        UploadS[UPLOAD_LOCAL].s = ISS_ON;
+                        UploadSP.s = IPS_OK;
+                        IDSetSwitch(&UploadSP, nullptr);
+                    }
+
+                    // Capture target should always be SD card.
+                    if (captureTargetS[CAPTURE_SD_CARD].s != ISS_ON)
+                    {
+                        IUResetSwitch(&captureTargetSP);
+                        captureTargetSP.s = IPS_OK;
+                        captureTargetS[CAPTURE_SD_CARD].s = ISS_ON;
+                        gphoto_set_capture_target(gphotodrv, CAPTURE_SD_CARD);
+                        IDSetSwitch(&captureTargetSP, nullptr);
+                    }
+                    break;
             }
 
+            gphoto_handle_sdcard_image(gphotodrv, static_cast<CameraImageHandling>(index));
             IDSetSwitch(&SDCardImageSP, nullptr);
             return true;
         }
@@ -811,6 +784,7 @@ bool GPhotoCCD::ISNewNumber(const char * dev, const char * name, double values[]
             IUUpdateNumber(&mMirrorLockNP, values, names, n);
             mMirrorLockNP.s = IPS_OK;
             IDSetNumber(&mMirrorLockNP, nullptr);
+            saveConfig(true, mMirrorLockNP.name);
             return true;
         }
 
@@ -879,54 +853,37 @@ bool GPhotoCCD::Connect()
         PrimaryCCD.setMinMaxStep("CCD_EXPOSURE", "CCD_EXPOSURE_VALUE", min_exposure, max_exposure, 1, true);
     }
 
-    if (mFormatS)
-    {
-        free(mFormatS);
-        mFormatS = nullptr;
-    }
-
     const char * fmts[] = { "Custom" };
-    setidx             = 0;
+    //setidx             = 0;
     max_opts           = 1;
     options            = const_cast<char **>(fmts);
 
     if (!isSimulation())
     {
-        setidx  = gphoto_get_format_current(gphotodrv);
+        //setidx  = gphoto_get_format_current(gphotodrv);
         options = gphoto_get_formats(gphotodrv, &max_opts);
     }
 
     if (max_opts > 0)
     {
-        mFormatS      = create_switch("FORMAT", options, max_opts, setidx);
-        mFormatSP.sp  = mFormatS;
-        mFormatSP.nsp = max_opts;
-
-        ISwitch * sp = IUFindOnSwitch(&mFormatSP);
-        if (sp && strstr(sp->label, "+"))
+        for (int i = 0; i < max_opts; i++)
         {
-            IUResetSwitch(&mFormatSP);
-            int i = 0;
-
-            // Prefer RAW format in case selected format is not supported.
-            for (i = 0; i < mFormatSP.nsp; i++)
+            std::string label = options[i];
+            if (label.find('+') != std::string::npos ||
+                    label.find("sRAW") != std::string::npos ||
+                    label.find("mRAW") != std::string::npos)
             {
-                // Make sure the new selection does not include the problematic label with the +
-                // also also contains the string RAW in it.
-                if (strcmp(sp->label, mFormatSP.sp[i].label) && strcasestr("RAW", mFormatSP.sp[i].label))
-                {
-                    mFormatS[i].s = ISS_ON;
-                    break;
-                }
+                continue;
             }
 
-            if (i == mFormatSP.nsp)
-            {
-                LOGF_ERROR("%s format is not supported. Please select another format.", sp->label);
-                mFormatSP.s = IPS_ALERT;
-            }
+            uint8_t index = CaptureFormatSP.size();
+            auto isRAW = strcasestr(label.c_str(), "RAW") != nullptr;
+            char name[MAXINDINAME] = {0};
+            snprintf(name, MAXINDINAME, "FORMAT_%d", index + 1);
+            CaptureFormat format = {name, label, 8, isRAW};
+            addCaptureFormat(format);
 
-            IDSetSwitch(&mFormatSP, nullptr);
+            m_CaptureFormatMap[index] = i;
         }
     }
 
@@ -1044,19 +1001,12 @@ bool GPhotoCCD::StartExposure(float duration)
         return false;
     }
 
-    if (mFormatS != nullptr)
-    {
-        ISwitch * sp = IUFindOnSwitch(&mFormatSP);
-        if (sp == nullptr)
-        {
-            LOG_ERROR("Please select a format before capturing an image.");
-            return false;
-        }
-    }
-
     /* start new exposure with last ExpValues settings.
      * ExpGo goes busy. set timer to read when done
      */
+
+    if (isSimulation() == false)
+        gphoto_set_format(gphotodrv, m_CaptureFormatMap[CaptureFormatSP.findOnSwitchIndex()]);
 
     // Microseconds
     uint32_t exp_us = static_cast<uint32_t>(ceil(duration * 1e6));
@@ -1093,15 +1043,40 @@ bool GPhotoCCD::AbortExposure()
 
 bool GPhotoCCD::UpdateCCDFrame(int x, int y, int w, int h)
 {
-    if (TransferFormatS[FORMAT_FITS].s != ISS_ON)
+    if (EncodeFormatSP[FORMAT_FITS].getState() != ISS_ON && EncodeFormatSP[FORMAT_XISF].getState() != ISS_ON)
     {
-        LOG_ERROR("Subframing is only supported in FITS transport mode.");
+        LOG_ERROR("Subframing is only supported in FITS/XISF encode mode.");
         return false;
     }
 
     PrimaryCCD.setFrame(x, y, w, h);
     return true;
 }
+
+// binning
+bool GPhotoCCD::UpdateCCDBin(int hor, int ver)
+{
+
+    if(hor == 1 && ver == 1)
+    {
+        binning = false;
+    }
+    else
+    {
+        // only for fits output
+        if (EncodeFormatSP[FORMAT_FITS].getState() != ISS_ON && EncodeFormatSP[FORMAT_XISF].getState() != ISS_ON)
+        {
+            LOG_ERROR("Binning is only supported in FITS/XISF transport mode.");
+            return false;
+        }
+
+        binning = true;
+
+    }
+
+    return INDI::CCD::UpdateCCDBin(hor, ver);
+}
+
 
 double GPhotoCCD::CalcTimeLeft()
 {
@@ -1118,63 +1093,6 @@ void GPhotoCCD::TimerHit()
     if (isConnected() == false)
         return;
 
-    //    if (Streamer->isBusy())
-    //    {
-    //        bool rc = streamLiveView();
-
-    //        if (rc)
-    //            timerID = SetTimer(STREAMPOLLMS);
-    //        else
-    //        {
-    //            LOG_ERROR("Error capturing video stream.");
-    //            Streamer->setStream(false);
-    //        }
-    //    }
-
-    /*
-    if (livePreviewSP.s == IPS_BUSY)
-    {
-        bool rc = startLivePreview();
-
-        if (rc)
-            timerID = SetTimer(STREAMPOLLMS);
-        else
-        {
-            livePreviewSP.s = IPS_ALERT;
-            LOG_ERROR("Error capturing preview.");
-            livePreviewS[0].s = ISS_OFF;
-            livePreviewS[1].s = ISS_ON;
-            IDSetSwitch(&livePreviewSP, nullptr);
-        }
-    }
-    */
-
-    //    if (FocusTimerNP.s == IPS_BUSY)
-    //    {
-    //        char errMsg[MAXRBUF];
-    //        if (gphoto_manual_focus(gphotodrv, focusSpeed, errMsg) != GP_OK)
-    //        {
-    //            LOGF_ERROR("Focusing failed: %s", errMsg);
-    //            FocusTimerNP.s       = IPS_ALERT;
-    //            FocusTimerN[0].value = 0;
-    //        }
-    //        else
-    //        {
-    //            FocusTimerN[0].value -= FOCUS_TIMER;
-    //            if (FocusTimerN[0].value <= 0)
-    //            {
-    //                FocusTimerN[0].value = 0;
-    //                FocusTimerNP.s       = IPS_OK;
-    //                if (Streamer->isBusy() == false)
-    //                    gphoto_set_view_finder(gphotodrv, false);
-    //            }
-    //            else if (timerID == -1)
-    //                timerID = SetTimer(FOCUS_TIMER);
-    //        }
-
-    //        IDSetNumber(&FocusTimerNP, nullptr);
-    //    }
-
     if (InExposure)
     {
         int timerID   = -1;
@@ -1187,7 +1105,7 @@ void GPhotoCCD::TimerHit()
 
         if (timeleft < 1.0)
         {
-            if (timeleft > 0.25 && timerID == -1)
+            if (timeleft > 0.25)
                 timerID = SetTimer(timeleft * 900);
             else
             {
@@ -1199,38 +1117,35 @@ void GPhotoCCD::TimerHit()
                 {
                     PrimaryCCD.setExposureFailed();
                 }
+            }
 
-                if (isTemperatureSupported)
+            if (isTemperatureSupported)
+            {
+                double cameraTemperature = static_cast<double>(gphoto_get_last_sensor_temperature(gphotodrv));
+                if (fabs(cameraTemperature - TemperatureN[0].value) > 0.01)
                 {
-                    double cameraTemperature = static_cast<double>(gphoto_get_last_sensor_temperature(gphotodrv));
-                    if (fabs(cameraTemperature - TemperatureN[0].value) > 0.01)
+                    // Check if we are getting bogus temperature values and set property to alert
+                    // unless it is already set
+                    if (cameraTemperature < MINUMUM_CAMERA_TEMPERATURE)
                     {
-                        // Check if we are getting bogus temperature values and set property to alert
-                        // unless it is already set
-                        if (cameraTemperature < MINUMUM_CAMERA_TEMPERATURE)
+                        if (TemperatureNP.s != IPS_ALERT)
                         {
-                            if (TemperatureNP.s != IPS_ALERT)
-                            {
-                                TemperatureNP.s = IPS_ALERT;
-                                IDSetNumber(&TemperatureNP, nullptr);
-                            }
-                        }
-                        else
-                        {
-                            TemperatureNP.s = IPS_OK;
-                            TemperatureN[0].value = cameraTemperature;
+                            TemperatureNP.s = IPS_ALERT;
                             IDSetNumber(&TemperatureNP, nullptr);
                         }
+                    }
+                    else
+                    {
+                        TemperatureNP.s = IPS_OK;
+                        TemperatureN[0].value = cameraTemperature;
+                        IDSetNumber(&TemperatureNP, nullptr);
                     }
                 }
             }
         }
-        else
-        {
-            //LOGF_DEBUG("Capture in progress. Time left %.2f seconds", timeleft);
-            if (timerID == -1)
-                SetTimer(getCurrentPollingPeriod());
-        }
+
+        if (InExposure && timerID == -1)
+            SetTimer(getCurrentPollingPeriod());
     }
 }
 
@@ -1265,20 +1180,32 @@ bool GPhotoCCD::grabImage()
     size_t memsize = 0;
     int naxis = 2, w = 0, h = 0, bpp = 8;
 
-    if (TransferFormatS[FORMAT_FITS].s == ISS_ON)
+    if (SDCardImageS[SD_CARD_IGNORE_IMAGE].s == ISS_ON)
+    {
+        PrimaryCCD.setFrameBufferSize(0);
+        ExposureComplete(&PrimaryCCD);
+        gphoto_read_exposure_fd(gphotodrv, -1);
+    }
+    else if (EncodeFormatSP[FORMAT_FITS].getState() == ISS_ON || EncodeFormatSP[FORMAT_XISF].getState() == ISS_ON)
     {
         char filename[MAXRBUF] = "/tmp/indi_XXXXXX";
         const char *extension = "unknown";
         if (isSimulation())
         {
-            if (!UploadFileT[0].text[0])
+            if (UploadFileT[0].text == nullptr || !UploadFileT[0].text[0])
             {
                 LOG_WARN("You must specify simulation file path under Options.");
                 return false;
             }
 
             strncpy(filename, UploadFileT[0].text, MAXRBUF);
-            extension = strchr(filename, '.') + 1;
+            const char *found = strchr(filename, '.');
+            if (found == nullptr)
+            {
+                LOGF_ERROR("Upload filename %s is invalid.", UploadFileT[0].text);
+                return false;
+            }
+            extension =  found + 1;
         }
         else
         {
@@ -1329,8 +1256,23 @@ bool GPhotoCCD::grabImage()
         else
         {
             char bayer_pattern[8] = {};
+            auto libraw_ok = false;
 
-            if (read_libraw(filename, &memptr, &memsize, &naxis, &w, &h, &bpp, bayer_pattern))
+            // In case the file read operation fails due to some disk delay (unlikely)
+            // Try again before giving up.
+            for (int i = 0; i < 2; i++)
+            {
+                // On error, try again in 500ms
+                if (read_libraw(filename, &memptr, &memsize, &naxis, &w, &h, &bpp, bayer_pattern))
+                    usleep(500000);
+                else
+                {
+                    libraw_ok = true;
+                    break;
+                }
+            }
+
+            if (libraw_ok == false)
             {
                 LOG_ERROR("Exposure failed to parse raw image.");
                 if (!isSimulation())
@@ -1349,7 +1291,10 @@ bool GPhotoCCD::grabImage()
             SetCCDCapability(GetCCDCapability() | CCD_HAS_BAYER);
         }
 
-        PrimaryCCD.setImageExtension("fits");
+        if (EncodeFormatSP[FORMAT_FITS].getState() == ISS_ON)
+            PrimaryCCD.setImageExtension("fits");
+        else
+            PrimaryCCD.setImageExtension("xisf");
 
         uint16_t subW = PrimaryCCD.getSubW();
         uint16_t subH = PrimaryCCD.getSubH();
@@ -1359,6 +1304,7 @@ bool GPhotoCCD::grabImage()
         // then we subframe, given the OTHER axis is within range as well.
         if ( (subW > 0 && subH > 0) && ((subW < w && subH <= h) || (subH < h && subW <= w)))
         {
+
             uint16_t subX = PrimaryCCD.getSubX();
             uint16_t subY = PrimaryCCD.getSubY();
 
@@ -1410,6 +1356,18 @@ bool GPhotoCCD::grabImage()
             PrimaryCCD.setNAxis(naxis);
             PrimaryCCD.setBPP(bpp);
 
+            // binning if needed
+            if(binning)
+            {
+
+                // binBayerFrame implemented since 1.9.4
+#if INDI_VERSION_MAJOR >= 1 && INDI_VERSION_MINOR >= 9 && INDI_VERSION_RELEASE >=4
+                PrimaryCCD.binBayerFrame();
+#else
+                PrimaryCCD.binFrame();
+#endif
+            }
+
             ExposureComplete(&PrimaryCCD);
 
             // Restore old pointer and release memory
@@ -1423,22 +1381,34 @@ bool GPhotoCCD::grabImage()
                 LOGF_WARN("Camera image size (%dx%d) is less than requested size (%d,%d). Purge configuration and update frame size to match camera size.",
                           w, h, PrimaryCCD.getSubW(), PrimaryCCD.getSubH());
 
-            PrimaryCCD.setFrame(0, 0, w, h);
             PrimaryCCD.setFrameBuffer(memptr);
             PrimaryCCD.setFrameBufferSize(memsize, false);
             PrimaryCCD.setResolution(w, h);
+            PrimaryCCD.setFrame(0, 0, w, h);
             PrimaryCCD.setNAxis(naxis);
             PrimaryCCD.setBPP(bpp);
+
+            // binning if needed
+            if(binning)
+            {
+                // binBayerFrame implemented since 1.9.4
+#if INDI_VERSION_MAJOR >= 1 && INDI_VERSION_MINOR >= 9 && INDI_VERSION_RELEASE >=4
+                PrimaryCCD.binBayerFrame();
+#else
+                PrimaryCCD.binFrame();
+#endif
+            }
 
             ExposureComplete(&PrimaryCCD);
         }
     }
+
     // Read Native image AS IS
     else
     {
         if (isSimulation())
         {
-            int fd = open(UploadFileT[0].text, O_RDONLY | S_IRUSR);
+            int fd = open(UploadFileT[0].text, O_RDONLY);
             struct stat sb;
 
             // Get file size
@@ -1496,11 +1466,21 @@ bool GPhotoCCD::grabImage()
             // We're done exposing
             if (ExposureRequest > 3)
                 LOG_DEBUG("Exposure done, downloading image...");
-            uint8_t * newMemptr = nullptr;
-            gphoto_get_buffer(gphotodrv, const_cast<const char **>(reinterpret_cast<char **>(&newMemptr)), &memsize);
+            const char * gphotoFileData = nullptr;
+            unsigned long gphotoFileSize = 0;
+            gphoto_get_buffer(gphotodrv, &gphotoFileData, &gphotoFileSize);
+            memsize = gphotoFileSize;
             // We copy the obtained memory pointer to avoid freeing some gphoto memory
-            memptr = static_cast<uint8_t *>(realloc(memptr, memsize));
-            memcpy(memptr, newMemptr, memsize);
+            memptr = static_cast<uint8_t *>(IDSharedBlobRealloc(memptr, gphotoFileSize));
+            if (memptr == nullptr)
+                memptr = static_cast<uint8_t *>(IDSharedBlobAlloc(gphotoFileSize));
+            if (memptr == nullptr)
+            {
+                LOG_ERROR("Failed to allocate memory to load file from camera.");
+                PrimaryCCD.setExposureFailed();
+                return false;
+            }
+            memcpy(memptr, gphotoFileData, gphotoFileSize);
 
             gphoto_get_dimensions(gphotodrv, &w, &h);
 
@@ -1515,7 +1495,6 @@ bool GPhotoCCD::grabImage()
             PrimaryCCD.setBPP(bpp);
 
         }
-
 
         ExposureComplete(&PrimaryCCD);
     }
@@ -1592,7 +1571,7 @@ void GPhotoCCD::AddWidget(gphoto_widget * widget)
 {
     IPerm perm;
 
-    if (!widget)
+    if (!widget || ((widget->type == GP_WIDGET_RADIO || widget->type == GP_WIDGET_MENU) && widget->choice_cnt > MAX_SWITCHES))
         return;
 
     perm = widget->readonly ? IP_RO : IP_RW;
@@ -1955,6 +1934,7 @@ void GPhotoCCD::streamLiveView()
         if (PrimaryCCD.getSubW() != w || PrimaryCCD.getSubH() != h)
         {
             Streamer->setSize(w, h);
+            PrimaryCCD.setBin(1, 1);
             PrimaryCCD.setFrame(0, 0, w, h);
         }
 
@@ -2014,12 +1994,11 @@ bool GPhotoCCD::startLivePreview()
 
     char * previewBlob = (char *)previewData;
 
-    imageB->blob    = previewBlob;
-    imageB->bloblen = previewSize;
-    imageB->size    = previewSize;
-    strncpy(imageB->format, "stream_jpeg", MAXINDIBLOBFMT);
-
-    IDSetBLOB(imageBP, nullptr);
+    imageBP[0].setBlob(previewBlob);
+    imageBP[0].setBlobLen(previewSize);
+    imageBP[0].setSize(previewSize);
+    imageBP[0].setFormat("stream_jpeg");
+    imageBP.apply();
 
     if (previewFile)
     {
@@ -2058,7 +2037,11 @@ bool GPhotoCCD::saveConfigItems(FILE * fp)
     if (captureTargetSP.s == IPS_OK)
     {
         IUSaveConfigSwitch(fp, &captureTargetSP);
-        // SD Card delete?
+    }
+
+    // SD Card delete?
+    if (captureTargetSP.s == IPS_OK || strstr(getDeviceName(), "Fuji"))
+    {
         IUSaveConfigSwitch(fp, &SDCardImageSP);
     }
 
@@ -2066,27 +2049,15 @@ bool GPhotoCCD::saveConfigItems(FILE * fp)
     if (mIsoSP.nsp > 0)
         IUSaveConfigSwitch(fp, &mIsoSP);
 
-    // Format Settings
-    if (mFormatSP.nsp > 0)
-        IUSaveConfigSwitch(fp, &mFormatSP);
-
-    // Transfer Format
-    IUSaveConfigSwitch(fp, &TransferFormatSP);
-
-    //    // Subframe Stream
-    //    IUSaveConfigSwitch(fp, &streamSubframeSP);
-
     // Force BULB Mode
     IUSaveConfigSwitch(fp, &forceBULBSP);
 
     return true;
 }
 
-void GPhotoCCD::addFITSKeywords(fitsfile * fptr, INDI::CCDChip * targetChip)
+void GPhotoCCD::addFITSKeywords(INDI::CCDChip * targetChip, std::vector<INDI::FITSRecord> &fitsKeywords)
 {
-    INDI::CCD::addFITSKeywords(fptr, targetChip);
-
-    int status = 0;
+    INDI::CCD::addFITSKeywords(targetChip, fitsKeywords);
 
     if (mIsoSP.nsp > 0)
     {
@@ -2095,13 +2066,13 @@ void GPhotoCCD::addFITSKeywords(fitsfile * fptr, INDI::CCDChip * targetChip)
         {
             int isoSpeed = atoi(onISO->label);
             if (isoSpeed > 0)
-                fits_update_key_s(fptr, TUINT, "ISOSPEED", &isoSpeed, "ISO Speed", &status);
+                fitsKeywords.push_back({"ISOSPEED", isoSpeed, "ISO Speed"});
         }
     }
 
     if (isTemperatureSupported)
     {
-        fits_update_key_s(fptr, TDOUBLE, "CCD-TEMP", &(TemperatureN[0].value), "CCD Temperature (Celsius)", &status);
+        fitsKeywords.push_back({"CCD-TEMP", TemperatureN[0].value, 3, "CCD Temperature (Celsius)"});
     }
 }
 
@@ -2109,6 +2080,11 @@ bool GPhotoCCD::UpdateCCDUploadMode(CCD_UPLOAD_MODE mode)
 {
     if (!isSimulation())
         gphoto_set_upload_settings(gphotodrv, mode);
+
+    // Reject changes to upload mode while we are ignoring the image download.
+    if (SDCardImageS[SD_CARD_IGNORE_IMAGE].s == ISS_ON && mode != UPLOAD_LOCAL)
+        return false;
+
     return true;
 }
 
@@ -2118,4 +2094,12 @@ void GPhotoCCD::simulationTriggered(bool enabled)
         defineProperty(&UploadFileTP);
     else
         deleteProperty(UploadFileTP.name);
+}
+
+bool GPhotoCCD::SetCaptureFormat(uint8_t index)
+{
+    INDI_UNUSED(index);
+    // We need to get frame W and H if format changes
+    frameInitialized = false;
+    return true;
 }

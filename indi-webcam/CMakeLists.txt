@@ -1,5 +1,5 @@
 PROJECT(indi_webcam C CXX)
-cmake_minimum_required(VERSION 3.0)
+cmake_minimum_required(VERSION 3.16)
 
 set (WEBCAM_VERSION_MAJOR 0)
 set (WEBCAM_VERSION_MINOR 2)
@@ -43,6 +43,8 @@ include_directories( ${FFMPEG_INCLUDE_DIR})
 if (CFITSIO_FOUND)
   include_directories(${CFITSIO_INCLUDE_DIR})
 endif (CFITSIO_FOUND)
+
+include(CMakeCommon)
 
 ########### OpenCV ###############
 set(webcam_SRCS

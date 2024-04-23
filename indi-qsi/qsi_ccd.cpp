@@ -113,13 +113,16 @@ QSICCD::~QSICCD()
 
 const char *QSICCD::getDefaultName()
 {
-    return (char *)"QSI CCD";
+    return "QSI CCD";
 }
 
 bool QSICCD::initProperties()
 {
     // Init parent properties first
     INDI::CCD::initProperties();
+
+    CaptureFormat format = {"INDI_MONO", "Mono", 16, true};
+    addCaptureFormat(format);
 
     IUFillSwitch(&CoolerS[0], "COOLER_ON", "ON", ISS_OFF);
     IUFillSwitch(&CoolerS[1], "COOLER_OFF", "OFF", ISS_ON);
@@ -907,11 +910,10 @@ int QSICCD::grabImage()
     return 0;
 }
 
-void QSICCD::addFITSKeywords(fitsfile *fptr, INDI::CCDChip *targetChip)
+void QSICCD::addFITSKeywords(INDI::CCDChip *targetChip, std::vector<INDI::FITSRecord> &fitsKeywords)
 {
-    INDI::CCD::addFITSKeywords(fptr, targetChip);
+    INDI::CCD::addFITSKeywords(targetChip, fitsKeywords);
 
-    int status = 0;
     double electronsPerADU;
 
     try
@@ -928,7 +930,7 @@ void QSICCD::addFITSKeywords(fitsfile *fptr, INDI::CCDChip *targetChip)
     if (IUFindOnSwitchIndex(&GainSP) == GAIN_AUTO && PrimaryCCD.getBinX() > 1)
         electronsPerADU = 1.1;
 
-    fits_update_key_s(fptr, TDOUBLE, "EPERADU", &electronsPerADU, "Electrons per ADU", &status);
+    fitsKeywords.push_back({"EPERADU", electronsPerADU, 3, "Electrons per ADU"});
 }
 
 bool QSICCD::manageDefaults()

@@ -88,7 +88,7 @@ class QHYCCD : public INDI::CCD, public INDI::FilterInterface
         virtual void TimerHit() override;
         virtual bool saveConfigItems(FILE *fp) override;
         virtual const char *getDefaultName() override;
-        void addFITSKeywords(fitsfile *fptr, INDI::CCDChip *targetChip) override;
+        void addFITSKeywords(INDI::CCDChip *targetChip, std::vector<INDI::FITSRecord> &fitsKeywords) override;
 
         /////////////////////////////////////////////////////////////////////////////
         /// Camera Properties
@@ -100,6 +100,19 @@ class QHYCCD : public INDI::CCD, public INDI::FilterInterface
         // SDK Version
         ITextVectorProperty SDKVersionTP;
         IText SDKVersionT[1] {};
+        /////////////////////////////////////////////////////////////////////////////
+        /// Properties: Binning Support
+        /////////////////////////////////////////////////////////////////////////////
+
+        bool m_SupportedBins[4];
+		enum
+		{
+		Bin1x1,
+		Bin2x2,
+		Bin3x3,
+		Bin4x4,
+		};
+
 
         // Cooler Switch
         ISwitchVectorProperty CoolerSP;
@@ -329,8 +342,8 @@ class QHYCCD : public INDI::CCD, public INDI::FilterInterface
             uint16_t height = 0;
 
             // Location
-            uint32_t latitude = 0;
-            uint32_t longitude = 0;
+            double latitude = 0;
+            double longitude = 0;
 
             // Start Time
             uint8_t start_flag = 0;
@@ -484,4 +497,5 @@ class QHYCCD : public INDI::CCD, public INDI::FilterInterface
         /////////////////////////////////////////////////////////////////////////////
         static constexpr const char * GPS_CONTROL_TAB = "GPS Control";
         static constexpr const char * GPS_DATA_TAB = "GPS Data";
+        static constexpr uint64_t QHY_SER_US_EPOCH = 62948880000000000; // offset to SER epoch January 1, 1 AD
 };
