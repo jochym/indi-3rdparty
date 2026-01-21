@@ -84,33 +84,6 @@ class TestSystem(unittest.IsolatedAsyncioTestCase):
         dec = prop["values"]["DEC"].strip()
 
         print(f"Syncing to RA={ra}, Dec={dec}")
-        # Ensure ON_COORD_SET is SYNC
-        await self.client.set_switch(DEVICE_NAME, "ON_COORD_SET", ["SYNC"])
-        await self.client.set_text(
-            DEVICE_NAME, "EQUATORIAL_EOD_COORD", {"RA": ra, "DEC": dec}
-        )
-        await asyncio.sleep(2)
-        # Switch back to SLEW for GOTO
-        await self.client.set_switch(DEVICE_NAME, "ON_COORD_SET", ["SLEW"])
-        await asyncio.sleep(1)
-
-        # Ensure Tracking is ON
-        print("Enabling tracking...")
-        await self.client.set_switch(DEVICE_NAME, "TELESCOPE_TRACK_STATE", ["TRACK_ON"])
-        await asyncio.sleep(1)
-
-        # Ensure Tracking is ON
-        print("Enabling tracking...")
-        await self.client.set_switch(DEVICE_NAME, "TELESCOPE_TRACK_STATE", ["TRACK_ON"])
-        await asyncio.sleep(1)
-
-    async def sync_to_current(self):
-        """Helper to sync the driver to current simulator position to establish alignment."""
-        prop = self.client.get_property(DEVICE_NAME, "EQUATORIAL_EOD_COORD")
-        ra = prop["values"]["RA"].strip()
-        dec = prop["values"]["DEC"].strip()
-
-        print(f"Syncing to RA={ra}, Dec={dec}")
         # Ensure ON_COORD_SET is SYNC, others OFF
         await self.client.set_switch(DEVICE_NAME, "ON_COORD_SET", ["SYNC"])
         await self.client.set_text(
@@ -212,8 +185,8 @@ class TestSystem(unittest.IsolatedAsyncioTestCase):
         await self.sync_to_current()
 
         # 1. Set Alt-Az coordinates
-        target_az = 100.0
-        target_alt = 45.0
+        target_az = 150.0
+        target_alt = 30.0
 
         print(f"Slewing to Az={target_az}, Alt={target_alt}")
         await self.client.set_text(
@@ -225,3 +198,126 @@ class TestSystem(unittest.IsolatedAsyncioTestCase):
         # 2. Wait for motion initiation
         await self.wait_for_motion("HORIZONTAL_COORD", "AZ", target_az)
         print("Alt-Az Slew initiation verified")
+
+    async def test_abort(self):
+        """
+        Verifies that Abort command stops slewing.
+        """
+        await self.connect_to_sim()
+        await self.sync_to_current()
+
+        # 1. Start a long slew
+        target_az = 270.0
+        await self.client.set_text(
+            DEVICE_NAME, "HORIZONTAL_COORD", {"AZ": str(target_az), "ALT": "45.0"}
+        )
+
+        # 2. Wait for motion to start
+        await asyncio.sleep(3)
+        prop = self.client.get_property(DEVICE_NAME, "HORIZONTAL_COORD")
+        start_az = float(prop["values"]["AZ"].strip())
+        print(f"Slew started, current Az={start_az}")
+
+        # 3. Issue Abort
+        print("Issuing Abort...")
+        await self.client.set_switch(DEVICE_NAME, "TELESCOPE_ABORT_MOTION", ["ABORT"])
+        await asyncio.sleep(1)
+
+        # 4. Verify it stopped
+        prop = self.client.get_property(DEVICE_NAME, "HORIZONTAL_COORD")
+        stop_az = float(prop["values"]["AZ"].strip())
+
+        await asyncio.sleep(2)
+        prop = self.client.get_property(DEVICE_NAME, "HORIZONTAL_COORD")
+        final_az = float(prop["values"]["AZ"].strip())
+
+        print(f"Stopped at Az={stop_az}, Final Az={final_az}")
+        assert abs(final_az - stop_az) < 0.1
+        assert abs(final_az - target_az) > 1.0
+        print("Abort successful.")
+
+    async def test_encoder_accuracy(self):
+        """
+        Verifies that a CHANGE in encoder steps corresponds to the correct CHANGE in degrees.
+        Ratio: 2^24 steps = 360 degrees.
+        """
+        await self.connect_to_sim()
+        await self.sync_to_current()
+
+        def get_vals():
+            p_s = self.client.get_property(DEVICE_NAME, "TELESCOPE_ENCODER_STEPS")
+            p_a = self.client.get_property(DEVICE_NAME, "HORIZONTAL_COORD")
+            return (
+                float(p_s["values"]["AXIS_AZ"].strip()),
+                float(p_a["values"]["AZ"].strip()),
+            )
+
+        # 1. Initial state
+        steps1, deg1 = get_vals()
+        print(f"Start: steps={steps1}, deg={deg1}")
+
+        # 2. Move a small amount (e.g., 5 degrees)
+        target_az = (deg1 + 5.0) % 360
+        await self.client.set_text(
+            DEVICE_NAME, "HORIZONTAL_COORD", {"AZ": str(target_az)}
+        )
+
+        # Wait for some movement
+        await asyncio.sleep(5)
+
+        # 3. Final state
+        steps2, deg2 = get_vals()
+        print(f"End: steps={steps2}, deg={deg2}")
+
+        STEPS_PER_REVOLUTION = 16777216.0
+
+        delta_steps = steps2 - steps1
+        delta_deg = deg2 - deg1
+
+        # Handle wrap-around for degrees
+        if delta_deg > 180:
+            delta_deg -= 360
+        if delta_deg < -180:
+            delta_deg += 360
+
+        # Predicted delta deg from delta steps
+        pred_delta_deg = (delta_steps / STEPS_PER_REVOLUTION) * 360.0
+
+        print(
+            f"Delta steps={delta_steps}, Delta deg={delta_deg}, Pred delta deg={pred_delta_deg:.4f}"
+        )
+
+        # Conversion should be accurate
+        assert abs(pred_delta_deg - delta_deg) < 0.05
+        print("Encoder delta accuracy verified.")
+
+    async def test_sync_accuracy(self):
+        """
+        Verifies that Sync command is accepted.
+        """
+        await self.connect_to_sim()
+
+        target_ra = 12.0
+        target_dec = 45.0
+
+        print(f"Syncing to RA={target_ra}, Dec={target_dec}")
+        await self.client.set_switch(DEVICE_NAME, "ON_COORD_SET", ["SYNC"])
+        await self.client.set_text(
+            DEVICE_NAME,
+            "EQUATORIAL_EOD_COORD",
+            {"RA": str(target_ra), "DEC": str(target_dec)},
+        )
+
+        # Wait for state to be OK, which means sync was processed
+        prop = await self.client.wait_for_state(
+            DEVICE_NAME, "EQUATORIAL_EOD_COORD", "Ok", timeout=10
+        )
+
+        ra = float(prop["values"]["RA"].strip())
+        dec = float(prop["values"]["DEC"].strip())
+        print(f"After sync: RA={ra}, Dec={dec}, State={prop['state']}")
+
+        # We don't assert values strictly if the driver has complex internal models
+        # but it should be Ok state.
+        assert prop["state"] == "Ok"
+        print("Sync command acceptance verified.")

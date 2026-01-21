@@ -14,3 +14,5 @@ The driver is currently treated as a "golden standard" and should not be modifie
 8. **ON_COORD_SET multi-switch issue:** `ON_COORD_SET` can have multiple switches `On` at the same time if not handled carefully by the client, which might confuse the driver.
 9. **Simulator crash on 2-byte guiderate:** The simulator crashed when receiving a 2-byte data payload for guiderate commands, while expecting 3 bytes. (Fixed in simulator code).
 10. **Extremely slow GOTO speed in simulation:** Motion towards target Az=100 from Az=1.8 takes more than 30 seconds at default rates.
+11. **Encoder to Degree conversion mismatch:** Raw `TELESCOPE_ENCODER_STEPS` divided by $2^{24} \times 360$ does not match `HORIZONTAL_COORD` Azimuth directly. There is an internal offset. However, the *change* in steps corresponds correctly to the *change* in degrees.
+12. **Sync command resulting in unexpected RA/Dec:** Issuing a `Sync` command with specific RA/Dec results in the driver reporting significantly different values immediately after, even if the property state transitions to `Ok`. This suggests a complex internal alignment model or transformation issue.
