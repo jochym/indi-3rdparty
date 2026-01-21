@@ -82,6 +82,12 @@ class INDIClient:
         device = elem.get("device")
         name = elem.get("name")
 
+        if tag == "message":
+            msg = elem.text
+            if msg:
+                print(f"INDI Message [{device}]: {msg.strip()}")
+            return
+
         # We handle def*, set*, new* tags
         if device and name:
             if device not in self.devices:
@@ -108,8 +114,10 @@ class INDIClient:
                     prop["values"][child_name] = val
 
             self.devices[device][name] = prop
+            # print(f"DEBUG: Property update: {device}.{name} = {prop['state']} values={prop['values']}")
 
             # Notify listeners
+
             for queue in self.listeners:
                 await queue.put((device, name, prop))
 
