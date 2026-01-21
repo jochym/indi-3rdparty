@@ -1,36 +1,68 @@
-# NexStar Telescope Simulator
+# NexStar AUX Simulator
 
-This directory contains a Python-based simulator for Celestron NexStar telescopes. It allows you to control a virtual telescope using applications like Stellarium, which is useful for development, testing, and demonstration.
-
-## Contents
-
-*   `nse_simulator.py`:  The main script that sets up the network server, handles communication, and runs the simulation.
-*   `nse_telescope.py`:  Defines the `NexStarScope` class, which implements the telescope's behavior and command handling.
+This is an advanced simulator for Celestron AUX-protocol mounts. It emulates the behavior of Motor Controllers (MC), Hand Controller (HC), GPS, and other devices on the AUX bus.
 
 ## Features
 
-*   Simulates a Celestron NexStar telescope.
-*   Supports network control via a WiFly-like interface (port 2000).
-*   Integrates with Stellarium (port 10001).
-*   Provides a text-based user interface (TUI) for monitoring telescope status.
-*   Handles various NexStar commands for telescope control, including goto, slew, and guiding.
+- **Physical Model**: Simulates motion with backlash, periodic error (PE), cone error, and non-perpendicularity.
+- **Atmospheric Refraction**: Optional simulation of atmospheric refraction.
+- **Multiple Interfaces**:
+  - **Headless**: Minimal dependencies, suitable for automated tests.
+  - **TUI (Textual)**: Rich terminal user interface with real-time telemetry.
+  - **Web Console**: 3D visualization of the mount using Three.js, including a schematic sky view.
+- **Stellarium Support**: Built-in server for Stellarium telescope control protocol.
+- **Configurable**: All parameters can be tuned via `config.toml`.
+
+## Installation
+
+The simulator requires Python 3.11+.
+
+### Minimal (for basic testing)
+```bash
+pip install ephem
+```
+
+### Full (with TUI and Web Console)
+```bash
+pip install ephem textual fastapi uvicorn websockets numpy scipy
+```
 
 ## Usage
 
-1.  Ensure you have Python 3 installed.
-2.  Install the required dependencies: `pip install asyncio curses ephem`
-3.  Run the simulator: `python nse_simulator.py` (for TUI) or `python nse_simulator.py t` (for terminal output only)
-4.  Configure Stellarium to connect to the simulator on `localhost:10001`.
+Run the simulator from the `simulator/` directory:
 
-## Dependencies
+```bash
+# Headless mode (minimal dependencies)
+python3 nse_simulator.py -t
 
-*   Python 3
-*   `asyncio`
-*   `curses` (ncurses)
-*   `ephem`
+# TUI mode (requires 'textual')
+python3 nse_simulator.py
 
-## Notes
+# Web mode (requires 'fastapi', 'uvicorn', 'websockets')
+python3 nse_simulator.py --web
+```
 
-*   The simulator emulates the behavior of a Celestron NexStar telescope.
-*   The TUI provides a real-time view of the telescope's status.
-*   Report any issues or contribute to the project on [GitHub (link to your repository)].
+### Command Line Arguments
+
+- `-t`, `--text`: Use headless mode (no TUI).
+- `-p PORT`, `--port PORT`: AUX bus TCP port (default: 2000).
+- `-s PORT`, `--stellarium PORT`: Stellarium TCP port (default: 10001).
+- `--web`: Enable 3D Web Console (default: http://127.0.0.1:8080).
+- `--perfect`: Disable all mechanical imperfections (backlash, PE, etc.).
+- `-d`, `--debug`: Enable debug logging.
+
+## Configuration
+
+You can override default settings by creating a `config.toml` file in the simulator directory. See `config.default.toml` for available options.
+
+### Example `config.toml`
+```toml
+[observer]
+latitude = 52.2297
+longitude = 21.0122
+elevation = 100
+
+[simulator.imperfections]
+backlash_steps = 200
+periodic_error_arcsec = 15.0
+```

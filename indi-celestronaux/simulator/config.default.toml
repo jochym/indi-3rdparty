@@ -1,0 +1,66 @@
+[observer]
+name = "Default Location"
+latitude = 50.1822
+longitude = 19.7925
+elevation = 400
+
+[driver]
+port = "/dev/ttyUSB0"
+baud = 19200
+indi_port = 7624
+
+[simulator]
+aux_port = 2000
+stellarium_port = 10001
+web_port = 8080
+web_host = "0.0.0.0"
+
+[simulator.imperfections]
+backlash_steps = 50
+periodic_error_arcsec = 15.0
+periodic_error_period_sec = 480.0
+cone_error_arcmin = 5.0
+non_perpendicularity_arcmin = 3.0
+refraction_enabled = true
+encoder_jitter_steps = 2
+clock_drift = 0.0001 # 0.01% drift
+
+[simulator.geometry]
+# Dimensions in meters (standard Evolution 8)
+base_height = 0.18
+fork_height = 0.42
+fork_width = 0.22
+arm_thickness = 0.08
+ota_radius = 0.116
+ota_length = 0.43
+camera_length = 0.12
+
+[validation_hit]
+host = "localhost"
+port = 7624
+device = "Celestron AUX"
+slew_rate = 2
+fast_slew_rate = 9
+goto_test_distance_deg = 5.0
+
+[validation_ppt]
+host = "localhost"
+port = 7624
+mount_device = "Celestron AUX"
+camera_device = "CCD Simulator"
+exposure = 2.0
+upload_prefix = "ppt_accuracy"
+targets = [
+    [2.0, 45.0],
+    [10.0, 30.0],
+    [18.0, 60.0]
+]
+
+[validation_pec]
+host = "localhost"
+port = 7624
+mount_device = "Celestron AUX"
+camera_device = "CCD Simulator"
+duration = 20
+interval = 30
+exposure = 2.0
