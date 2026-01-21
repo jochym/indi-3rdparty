@@ -19,10 +19,14 @@ This plan outlines the step-by-step development of the system test suite for the
 - [ ] **State Transitions:** Verify transitions between Idle, Slewing, and Tracking states.
 - [ ] **Sync:** Verify that the Sync command correctly updates the driver's internal alignment model.
 
-## Phase 4: Advanced Features & Imperfections
-- [ ] **Backlash Compensation:** Simulate backlash in the simulator and verify the driver's compensation logic.
-- [ ] **Periodic Error:** Simulate PE and verify tracking stability.
-- [ ] **Alignment Subsystem:** Test multi-point alignment and pointing accuracy using the internal math plugins.
+## Phase 4a: Alignment Subsystem
+- [ ] **Initialization:** Set explicit Time and Location in tests to ensure Driver and Test agree on sky coordinates.
+- [ ] **Mount Identification:** Test if changing the driver name (e.g., via symlink) affects internal mount type detection.
+- [ ] **1-Star Alignment:** Verify that `Sync` establishes a reliable mapping at a single point.
+- [ ] **2-Star Alignment:** Verify that multiple points improve pointing accuracy across the sky using the "Nearest" math plugin.
+- [ ] **Model Persistence:** Verify that alignment points are correctly managed (added, cleared).
+
+## Phase 4b: Imperfections & Compensation
 
 ## Phase 5: Stability & Robustness
 - [ ] **Long-duration Tracking:** Verify tracking consistency over several hours.
