@@ -51,45 +51,85 @@ class TestSystem(unittest.IsolatedAsyncioTestCase):
     async def asyncTearDown(self):
         await self.client.disconnect()
 
+    async def connect_to_sim(self):
+        """Helper to connect the driver to the simulator."""
+        await self.client.wait_for_property(DEVICE_NAME, "CONNECTION_MODE")
+        await self.client.set_switch(DEVICE_NAME, "CONNECTION_MODE", ["CONNECTION_TCP"])
+        await self.client.set_text(
+            DEVICE_NAME, "DEVICE_ADDRESS", {"PORT": "2000", "ADDRESS": "localhost"}
+        )
+        await self.client.set_switch(DEVICE_NAME, "CONNECTION", ["CONNECT"])
+        await self.client.wait_for_state(DEVICE_NAME, "CONNECTION", "Ok")
+
+        # Wait for the driver to define coordinates after handshake
+        print("Waiting for coordinate properties...")
+        try:
+            await self.client.wait_for_any_property(
+                DEVICE_NAME,
+                lambda d, n, p: n in ["HORIZONTAL_COORD", "EQUATORIAL_EOD_COORD"],
+                timeout=10,
+            )
+        except Exception as e:
+            print(f"Warning: Coordinate properties not seen: {e}")
+
+        # Ensure Tracking is ON
+        print("Enabling tracking...")
+        await self.client.set_switch(DEVICE_NAME, "TELESCOPE_TRACK_STATE", ["TRACK_ON"])
+        await asyncio.sleep(1)
+
+    async def sync_to_current(self):
+        """Helper to sync the driver to current simulator position to establish alignment."""
+        prop = self.client.get_property(DEVICE_NAME, "EQUATORIAL_EOD_COORD")
+        ra = prop["values"]["RA"].strip()
+        dec = prop["values"]["DEC"].strip()
+
+        print(f"Syncing to RA={ra}, Dec={dec}")
+        # Ensure ON_COORD_SET is SYNC
+        await self.client.set_switch(DEVICE_NAME, "ON_COORD_SET", ["SYNC"])
+        await self.client.set_text(
+            DEVICE_NAME, "EQUATORIAL_EOD_COORD", {"RA": ra, "DEC": dec}
+        )
+        await asyncio.sleep(2)
+        # Switch back to SLEW for GOTO
+        await self.client.set_switch(DEVICE_NAME, "ON_COORD_SET", ["SLEW"])
+        await asyncio.sleep(1)
+
+        # Ensure Tracking is ON
+        print("Enabling tracking...")
+        await self.client.set_switch(DEVICE_NAME, "TELESCOPE_TRACK_STATE", ["TRACK_ON"])
+        await asyncio.sleep(1)
+
+        # Ensure Tracking is ON
+        print("Enabling tracking...")
+        await self.client.set_switch(DEVICE_NAME, "TELESCOPE_TRACK_STATE", ["TRACK_ON"])
+        await asyncio.sleep(1)
+
+    async def sync_to_current(self):
+        """Helper to sync the driver to current simulator position to establish alignment."""
+        prop = self.client.get_property(DEVICE_NAME, "EQUATORIAL_EOD_COORD")
+        ra = prop["values"]["RA"].strip()
+        dec = prop["values"]["DEC"].strip()
+
+        print(f"Syncing to RA={ra}, Dec={dec}")
+        # Ensure ON_COORD_SET is SYNC, others OFF
+        await self.client.set_switch(DEVICE_NAME, "ON_COORD_SET", ["SYNC"])
+        await self.client.set_text(
+            DEVICE_NAME, "EQUATORIAL_EOD_COORD", {"RA": ra, "DEC": dec}
+        )
+        await asyncio.sleep(3)
+        # Switch back to SLEW for GOTO, others OFF
+        await self.client.set_switch(DEVICE_NAME, "ON_COORD_SET", ["SLEW"])
+        await asyncio.sleep(1)
+
     async def test_firmware_info(self):
         """
         Verifies that the driver connects to the simulator and retrieves firmware info.
         """
-        # 1. Configure Connection Mode to TCP
-        # Wait for definition
-        prop = await self.client.wait_for_property(DEVICE_NAME, "CONNECTION_MODE")
-        # print(f"CONNECTION_MODE: {prop}")
-
-        # Set TCP
-        # Standard INDI switch name for TCP is usually "CONNECTION_TCP"
-        await self.client.set_switch(DEVICE_NAME, "CONNECTION_MODE", ["CONNECTION_TCP"])
-
-        # 2. Configure Host/Port
-        await self.client.set_text(
-            DEVICE_NAME, "DEVICE_ADDRESS", {"PORT": "2000", "ADDRESS": "localhost"}
-        )
-
-        # 3. Connect
-        await self.client.set_switch(DEVICE_NAME, "CONNECTION", ["CONNECT"])
-
-        # 4. Wait for Connection Success
-        # It might transition Idle -> Busy -> Ok/Alert
-        # We wait for final state
-        while True:
-            prop = await self.client.wait_for_property(DEVICE_NAME, "CONNECTION")
-            print(f"CONNECTION state: {prop['state']}")
-            if prop["state"] in ["Ok", "Alert"]:
-                break
-
-        if prop["state"] == "Alert":
-            # Print messages if any
-            # We don't capture messages yet in client
-            pass
-
-        assert prop["state"] == "Ok"
+        await self.connect_to_sim()
 
         # 5. Wait for Firmware Info
         # The driver reads this during Handshake
+        prop = None
         start_time = time.time()
         while time.time() - start_time < 15:
             # Check cache first
@@ -130,3 +170,58 @@ class TestSystem(unittest.IsolatedAsyncioTestCase):
         assert "7.11" in get_val("Ra/AZM version")
         assert "7.11" in get_val("Dec/ALT version")
         assert "5.28" in get_val("HC version")
+
+    async def wait_for_motion(self, property_name, field, target_value, timeout=60):
+        """Helper to wait for motion towards a target since state might stay Idle."""
+        start_prop = self.client.get_property(DEVICE_NAME, property_name)
+        start_val = float(start_prop["values"][field].strip())
+
+        print(
+            f"Waiting for motion on {property_name}.{field} from {start_val} towards {target_value}..."
+        )
+
+        end_time = asyncio.get_event_loop().time() + timeout
+        last_val = start_val
+        while asyncio.get_event_loop().time() < end_time:
+            await asyncio.sleep(2)
+            curr_prop = self.client.get_property(DEVICE_NAME, property_name)
+            curr_val = float(curr_prop["values"][field].strip())
+
+            print(
+                f"Motion check: {property_name}.{field} = {curr_val} (diff from start: {curr_val - start_val:.4f})"
+            )
+
+            # If we moved at least 0.05 degree from last check, we confirm motion
+            if abs(curr_val - last_val) > 0.05:
+                print("Motion confirmed.")
+                return curr_prop
+
+            # If we are close to target, we are done
+            if abs(curr_val - target_value) < 0.5:
+                return curr_prop
+
+            last_val = curr_val
+
+        raise TimeoutError(f"Motion timeout for {property_name}.{field}")
+
+    async def test_motion_altaz(self):
+        """
+        Verifies Alt-Az slewing initiation.
+        """
+        await self.connect_to_sim()
+        await self.sync_to_current()
+
+        # 1. Set Alt-Az coordinates
+        target_az = 100.0
+        target_alt = 45.0
+
+        print(f"Slewing to Az={target_az}, Alt={target_alt}")
+        await self.client.set_text(
+            DEVICE_NAME,
+            "HORIZONTAL_COORD",
+            {"AZ": str(target_az), "ALT": str(target_alt)},
+        )
+
+        # 2. Wait for motion initiation
+        await self.wait_for_motion("HORIZONTAL_COORD", "AZ", target_az)
+        print("Alt-Az Slew initiation verified")

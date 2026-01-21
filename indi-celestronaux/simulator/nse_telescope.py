@@ -145,7 +145,9 @@ def pack_int3(f: float) -> bytes:
 
 
 def unpack_int3(d: bytes) -> float:
-    """Unpacks 3 bytes into a float [0,1]."""
+    """Unpacks up to 3 bytes into a float [0,1]."""
+    if len(d) < 3:
+        d = d.ljust(3, b"\x00")
     return struct.unpack("!i", b"\x00" + d[:3])[0] / 2**24
 
 
