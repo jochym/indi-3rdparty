@@ -1,5 +1,10 @@
 # Changelog - indi-celestronaux System Tests
 
+## [2026-01-22 00:45] - Phase 5 Progress: Tracking Loop Observed
+- Implemented `test_predictive_tracking` to monitor background tracking updates.
+- Documented that predictive tracking appears inactive or highly suppressed in the current Alt-Az simulation environment (Issue 14 in `ISSUES.md`).
+- Increased test timeouts and polling frequencies to ensure thorough observation of driver behavior.
+
 ## [2026-01-22 00:25] - Phase 4b Progress: Anti-backlash Logic Verified
 - Implemented `test_approach_direction` to verify the driver's anti-backlash overshoot logic.
 - Verified that enabling `APPROACH_CONSTANT_OFFSET` results in successful GOTO motion.
