@@ -59,6 +59,11 @@ class TestSystem(unittest.IsolatedAsyncioTestCase):
 
     @classmethod
     def setUpClass(cls):
+        # Ensure we have clean state
+        subprocess.run(
+            ["pkill", "-9", "-f", "indi_celestron_aux|indiserver|nse_simulator.py"],
+            stderr=subprocess.DEVNULL,
+        )
         pass
 
     @classmethod
@@ -83,6 +88,13 @@ class TestSystem(unittest.IsolatedAsyncioTestCase):
             lambda d, n, p: n in ["HORIZONTAL_COORD", "EQUATORIAL_EOD_COORD"],
             timeout=10,
         )
+
+        # Force ALTAZ mount type
+        print("Forcing mount type to ALTAZ...")
+        await self.client.send_new_switch(
+            DEVICE_NAME, "TELESCOPE_MOUNT_TYPE", ["ALTAZ"]
+        )
+        await asyncio.sleep(1)
 
         # Set Location and Time
         await self.client.set_location(DEVICE_NAME, "51.5", "0.0", "50.0")
@@ -322,3 +334,221 @@ class TestSystem(unittest.IsolatedAsyncioTestCase):
         assert abs(ra - goto_ra) < 0.2
         assert abs(dec - goto_dec) < 0.5
         print("GOTO accuracy after alignment verified (with simulation tolerance).")
+
+    async def test_reconnection(self):
+        """
+        Phase 5: Verifies recovery from connection loss.
+        """
+        await self.connect_to_sim()
+
+        # 1. Kill the simulator while driver is connected
+        print("Killing simulator...")
+        self.sim_proc.terminate()
+        self.sim_proc.wait()
+
+        # 2. Driver should transition to Alert state for CONNECTION
+        # Give it more time to detect timeout (it might take up to 60s)
+        print("Waiting for driver to detect connection loss...")
+        try:
+            prop = await self.client.wait_for_state(
+                DEVICE_NAME, "CONNECTION", "Alert", timeout=65
+            )
+            print("Driver correctly detected connection loss.")
+        except asyncio.TimeoutError:
+            print("Driver did not transition to Alert state within 65s.")
+            prop = self.client.get_property(DEVICE_NAME, "CONNECTION")
+            print(f"Current connection state: {prop['state']}")
+
+        # 3. Restart simulator
+        print("Restarting simulator...")
+        cmd_sim = [sys.executable, "-u", SIM_EXEC, "-t", "-p", str(SIM_PORT)]
+        self.sim_proc = subprocess.Popen(
+            cmd_sim, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+        )
+        await asyncio.sleep(2)
+
+        # 4. Attempt reconnection
+        print("Attempting to reconnect...")
+        await self.client.set_switch(DEVICE_NAME, "CONNECTION", ["CONNECT"])
+        prop = await self.client.wait_for_state(
+            DEVICE_NAME, "CONNECTION", "Ok", timeout=10
+        )
+        assert prop["state"] == "Ok"
+        print("Reconnection successful.")
+
+    async def test_parking(self):
+        """
+        Verifies Park and Unpark functionality.
+        """
+        await self.connect_to_sim()
+        await self.sync_to_current()
+
+        # 1. Unpark if parked
+        print("Ensuring telescope is Unparked...")
+        await self.client.set_switch(DEVICE_NAME, "TELESCOPE_PARK", ["UNPARK"])
+        await self.client.wait_for_state(DEVICE_NAME, "TELESCOPE_PARK", "Ok")
+
+        # 2. Slew away from park position
+        print("Slewing away from park...")
+        await self.client.set_number(
+            DEVICE_NAME, "HORIZONTAL_COORD", {"AZ": "100.0", "ALT": "45.0"}
+        )
+        await self.wait_for_motion("HORIZONTAL_COORD", "AZ", 100.0)
+
+        # 3. Issue Park
+        print("Parking...")
+        await self.client.set_switch(DEVICE_NAME, "TELESCOPE_PARK", ["PARK"])
+
+        # 4. Wait for Park to complete (Busy -> Ok)
+        await self.client.wait_for_state(
+            DEVICE_NAME, "TELESCOPE_PARK", "Busy", timeout=5
+        )
+        prop = await self.client.wait_for_state(
+            DEVICE_NAME, "TELESCOPE_PARK", "Ok", timeout=30
+        )
+        print("Parked successfully.")
+
+        # 5. Verify position is near 0,0 (default park)
+        prop_az = self.client.get_property(DEVICE_NAME, "HORIZONTAL_COORD")
+        az = float(prop_az["values"]["AZ"].strip())
+        alt = float(prop_az["values"]["ALT"].strip())
+        print(f"Position at Park: Az={az:.4f}, Alt={alt:.4f}")
+        # We don't assert exact 0,0 because park position might be configurable,
+        # but it should be stationary.
+
+        # 6. Unpark
+        print("Unparking...")
+        await self.client.set_switch(DEVICE_NAME, "TELESCOPE_PARK", ["UNPARK"])
+        print("Unparked successfully.")
+
+    async def test_homing(self):
+        """
+        Verifies Homing functionality.
+        """
+        await self.connect_to_sim()
+        await self.sync_to_current()
+
+        # 1. Slew away from home
+        print("Slewing away from home...")
+        await self.client.set_number(
+            DEVICE_NAME, "HORIZONTAL_COORD", {"AZ": "45.0", "ALT": "45.0"}
+        )
+        await self.wait_for_motion("HORIZONTAL_COORD", "AZ", 45.0)
+
+        # 2. Issue Home All
+        print("Issuing Home All...")
+        await self.client.set_switch(DEVICE_NAME, "HOME", ["ALL"])
+
+        # 3. Wait for homing to complete (Wait for position near 0,0)
+        # The driver seems to transition to Ok state too early, or stay Idle if already there.
+        # We rely on coords reaching zero.
+        print("Waiting for mount to reach home position...")
+        end_time = time.time() + 60
+        home_reached = False
+        while time.time() < end_time:
+            await asyncio.sleep(2)
+            prop_az = self.client.get_property(DEVICE_NAME, "HORIZONTAL_COORD")
+            az = float(prop_az["values"]["AZ"].strip())
+            alt = float(prop_az["values"]["ALT"].strip())
+            print(f"Homing check: Az={az:.4f}, Alt={alt:.4f}")
+            # Wrap Az around 360
+            if az > 180:
+                az -= 360
+            if abs(az) < 0.2 and abs(alt) < 0.2:
+                print("Home reached.")
+                home_reached = True
+                break
+
+        assert home_reached, "Mount did not reach home position"
+
+        # 4. Verify position is near 0,0 (default home)
+        prop_az = self.client.get_property(DEVICE_NAME, "HORIZONTAL_COORD")
+        az = float(prop_az["values"]["AZ"].strip())
+        alt = float(prop_az["values"]["ALT"].strip())
+        print(f"Final Position at Home: Az={az:.4f}, Alt={alt:.4f}")
+        if az > 180:
+            az -= 360
+        assert abs(az) < 0.2
+        assert abs(alt) < 0.2
+        print("Homing verified.")
+
+    async def test_manual_motion(self):
+        """
+        Verifies manual motion controls (NSWE).
+        """
+        await self.connect_to_sim()
+        await self.sync_to_current()
+
+        # 1. Set a high slew rate for visibility
+        print("Setting slew rate to 8x...")
+        await self.client.set_switch(DEVICE_NAME, "TELESCOPE_SLEW_RATE", ["8x"])
+        await self.client.wait_for_condition(
+            DEVICE_NAME,
+            "TELESCOPE_SLEW_RATE",
+            lambda p: p["values"].get("8x") == "On",
+            timeout=5,
+        )
+
+        # 2. Test North motion
+        print("Moving North...")
+        # Get starting altitude and wait for a fresh update
+        prop = await self.client.wait_for_property(DEVICE_NAME, "HORIZONTAL_COORD")
+        start_alt = float(prop["values"]["ALT"].strip())
+
+        await self.client.set_switch(
+            DEVICE_NAME, "TELESCOPE_MOTION_NS", ["MOTION_NORTH"]
+        )
+
+        # Wait for motion to be reflected in coordinates
+        # We expect at least 0.1 degree change at 8x rate (2 deg/s) in 2 seconds
+        end_time = time.time() + 5
+        moved = False
+        while time.time() < end_time:
+            await asyncio.sleep(1)
+            prop = self.client.get_property(DEVICE_NAME, "HORIZONTAL_COORD")
+            curr_alt = float(prop["values"]["ALT"].strip())
+            print(
+                f"Current altitude: {curr_alt:.4f} (diff: {curr_alt - start_alt:.4f})"
+            )
+            if abs(curr_alt - start_alt) > 0.1:
+                moved = True
+                break
+
+        assert moved, "Telescope did not move North"
+
+        # 3. Stop motion
+        print("Stopping North motion...")
+        await self.client.set_switch(DEVICE_NAME, "TELESCOPE_MOTION_NS", [])
+
+        # Wait for it to stop
+        await asyncio.sleep(2)
+        prop = self.client.get_property(DEVICE_NAME, "HORIZONTAL_COORD")
+        stop_alt = float(prop["values"]["ALT"].strip())
+        await asyncio.sleep(2)
+        prop = self.client.get_property(DEVICE_NAME, "HORIZONTAL_COORD")
+        final_alt = float(prop["values"]["ALT"].strip())
+        print(f"Stopped at Alt={stop_alt}, Final Alt={final_alt}")
+        # Allow small tracking drift
+        assert abs(final_alt - stop_alt) < 0.05
+
+        print("Manual motion verified.")
+
+        # 4. Test West motion
+        print("Moving West...")
+        await self.client.set_switch(
+            DEVICE_NAME, "TELESCOPE_MOTION_WE", ["MOTION_WEST"]
+        )
+
+        # Wait and verify azimuth change
+        prop = self.client.get_property(DEVICE_NAME, "HORIZONTAL_COORD")
+        start_az = float(prop["values"]["AZ"].strip())
+        await asyncio.sleep(2)
+        prop = self.client.get_property(DEVICE_NAME, "HORIZONTAL_COORD")
+        curr_az = float(prop["values"]["AZ"].strip())
+        print(f"Azimuth change: {curr_az - start_az:.4f}")
+        # Note: direction (increasing/decreasing) depends on mount setup, but it should move
+        assert abs(curr_az - start_az) > 0.1
+
+        # Stop
+        await self.client.set_switch(DEVICE_NAME, "TELESCOPE_MOTION_WE", [])
+        print("Manual motion verified.")

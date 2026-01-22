@@ -1,5 +1,15 @@
 # Changelog - indi-celestronaux System Tests
 
+## [2026-01-21 23:45] - Phase 4b Progress: Homing Test Verified
+- Verified `HOME` all command and automated return to zero position.
+- Updated simulator (`nse_telescope.py`) to correctly implement `MC_LEVEL_DONE` (0x12) and `MC_SEEK_DONE` (0x18).
+- Updated simulator to perform physical motion towards zero during homing.
+- Handled azimuth wrap-around and early state transition in `test_homing`.
+
+## [2026-01-21 23:15] - Phase 5 Start: Stability & Robustness
+- **Reconnection Test:** Implemented `test_reconnection` to verify recovery from lost TCP connection. Observed that the driver takes a significant amount of time (over 65s) to detect connection loss.
+- **Manual Motion:** Continuing to investigate why NSWE manual motion commands are reaching the driver but not resulting in physical motion in the simulator.
+
 ## [2026-01-21 14:45] - Phase 4a Completion: Alignment Subsystem Verified
 - **Resolved GOTO Issue (Issue 13):** Confirmed that RA/Dec GOTO works perfectly after a valid `Sync`. The earlier failure was caused by using `set_text` for Number properties and missing Alignment Plugin selection.
 - Verified coordinate transformation accuracy: relative RA/Dec moves are highly precise after 1-star alignment.

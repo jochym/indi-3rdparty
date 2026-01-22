@@ -116,21 +116,26 @@ Strictly adhere to the following conventions to maintain consistency with the ex
 - If adding support for a new module, update `m_MainBoardVersion`, etc., and the `FirmwareTP` property.
 
 ## Documentation and Git Requirements
-- **Incremental Commits:** Commit after each successfully completed step or feature.
-- **Detailed Messages:** Commit messages should clearly state what was achieved.
-- **Changelog:** Maintain `indi-celestronaux/CHANGELOG.md` with timestamped entries (YYYY-MM-DD HH:MM) for all significant changes. This helps in tracking history and resolving merge conflicts.
-- **Driver Integrity:** Do not modify the driver (`celestronaux.cpp/h`, `auxproto.cpp/h`) unless explicitly instructed. Treat it as the "golden standard".
-- **Issue Tracking:** Record any potential driver bugs or observations in `indi-celestronaux/POTENTIAL_ISSUES.md`.
+- **Incremental Commits:** Commit after each successfully completed step, phase, or feature. Maintain small, complete increments to enable easy backtracking.
+- **Detailed Messages:** Commit messages should clearly state the "why" and "what" of the changes.
+- **Changelog and Docs:** Update `indi-celestronaux/CHANGELOG.md` and other documentation (e.g., `ISSUES.md`, `TEST_PLAN.md`) at every commit where necessary.
+- **Timestamped Entries:** Use `YYYY-MM-DD HH:MM` timestamps in `CHANGELOG.md` to help track history and resolve merge conflicts.
+- **English Only:** All on-disk texts (comments, documentation, commit messages, logs) MUST be in English, even if the conversation with the user is in another language.
+- **Driver Integrity:** **DO NOT** modify the C++ driver code (`celestronaux.cpp/h`, `auxproto.cpp/h`, etc.) during the test development stage. It is considered working code. If issues are discovered, document them clearly in `ISSUES.md` to be addressed in a later stage.
+- **Issue Tracking:** Record all discovered driver bugs, unexpected behaviors, or observations in `indi-celestronaux/ISSUES.md`.
 
 ## Development Workflow
-1. **Environment:** Ensure `libindi-dev` and other prerequisites are installed.
-2. **Simulator:** Use the simulator for testing protocol changes without hardware.
+1. **Branching Strategy:** 
+   - Develop each well-defined feature or bugfix in a separate branch.
+   - Merge feature branches into a single shared test branch to verify compatibility and resolve merge conflicts.
+2. **Environment:** Ensure `libindi-dev` and other prerequisites are installed.
+3. **Simulator:** Use the simulator for testing protocol changes without hardware.
    - Run `make run-sim` in one terminal.
    - Run `make run` in another terminal.
    - Connect using an INDI client (e.g., KStars/Ekos) to `localhost`.
-3. **Verification:** Verify changes by running `make` and checking for compiler warnings.
-4. **Testing:** Run existing tests using `ctest` before submitting changes.
-5. **Formatting:** Run `clang-format` on modified files.
+4. **Verification:** Verify changes by running `make` and checking for compiler warnings.
+5. **Testing:** Run existing tests using `ctest` or `pytest` before submitting changes.
+6. **Formatting:** Run `clang-format` on modified files.
 
 ## Licensing
 - All new files must include the GPLv2+ license header.

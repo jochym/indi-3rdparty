@@ -255,9 +255,10 @@ class NexStarScope:
             0x06: self.set_pos_guiderate,
             0x07: self.set_neg_guiderate,
             0x0B: self.level_start,
+            0x12: self.level_done,
             0x13: self.slew_done,
             0x17: self.goto_slow,
-            0x18: self.at_index,
+            0x18: self.seek_done,
             0x19: self.seek_index,
             0x20: self.set_maxrate,
             0x21: self.get_maxrate,
@@ -464,7 +465,32 @@ class NexStarScope:
         return self._set_guiderate(data, snd, rcv, -1)
 
     def level_start(self, data: bytes, snd: int, rcv: int) -> bytes:
-        return b""
+        """Starts a leveling process (simplified to GOTO 0.0)."""
+        self.last_cmd = "LEVEL_START"
+        self.slewing = self.goto = True
+        self.guiding = False
+        r = 5.0 / 360  # 5 deg/s
+        if rcv == 0x11:
+            self.trg_alt = 0.0
+            self.alt_rate = -r
+        else:
+            self.trg_azm = 0.0
+            self.azm_rate = -r
+        return b"\x00"
+
+    def seek_index(self, data: bytes, snd: int, rcv: int) -> bytes:
+        """Starts a seek-index process (simplified to GOTO 0.0)."""
+        self.last_cmd = "SEEK_INDEX"
+        self.slewing = self.goto = True
+        self.guiding = False
+        r = 5.0 / 360  # 5 deg/s
+        if rcv == 0x11:
+            self.trg_alt = 0.0
+            self.alt_rate = -r
+        else:
+            self.trg_azm = 0.0
+            self.azm_rate = -r
+        return b"\x00"
 
     def goto_slow(self, data: bytes, snd: int, rcv: int) -> bytes:
         """Starts a low-speed precision GOTO movement."""
@@ -496,11 +522,16 @@ class NexStarScope:
         eps = 1e-6 if self.last_cmd != "GOTO_FAST" else 1e-4
         return b"\x00" if abs(rate) > eps else b"\xff"
 
-    def at_index(self, data: bytes, snd: int, rcv: int) -> bytes:
-        return b"\x00"
+    def level_done(self, data: bytes, snd: int, rcv: int) -> bytes:
+        """Checks if level movement is finished."""
+        # For simplicity, we say done if within 0.01 degree of target 0
+        done = abs(self.alt) < 0.01 / 360.0
+        return b"\xff" if done else b"\x00"
 
-    def seek_index(self, data: bytes, snd: int, rcv: int) -> bytes:
-        return b""
+    def seek_done(self, data: bytes, snd: int, rcv: int) -> bytes:
+        """Checks if seek movement is finished."""
+        done = abs(self.azm) < 0.01 / 360.0
+        return b"\xff" if done else b"\x00"
 
     def move_pos(self, data: bytes, snd: int, rcv: int) -> bytes:
         """Starts a constant-rate positive movement."""
