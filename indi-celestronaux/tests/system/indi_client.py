@@ -40,7 +40,7 @@ class INDIClient:
     async def send_data(self, data):
         if not self.writer:
             raise RuntimeError("Not connected")
-        logger.debug(f"Sending: {data}")
+        # print(f"DEBUG: Sending INDI XML: {data.decode().strip()}")
         self.writer.write(data)
         await self.writer.drain()
 
@@ -270,21 +270,12 @@ class INDIClient:
 
     async def set_switch(self, device, name, on_switches):
         """
-        on_switches: list of switch names to set On, others in vector will be Off
+        on_switches: list of switch names to set On
         """
-        prop = self.get_property(device, name)
-        if not prop:
-            # If property not known yet, just send the ones requested
-            xml = f'<newSwitchVector device="{device}" name="{name}">\n'
-            for s in on_switches:
-                xml += f'  <oneSwitch name="{s}">On</oneSwitch>\n'
-            xml += "</newSwitchVector>\n"
-        else:
-            xml = f'<newSwitchVector device="{device}" name="{name}">\n'
-            for s_name in prop["values"].keys():
-                val = "On" if s_name in on_switches else "Off"
-                xml += f'  <oneSwitch name="{s_name}">{val}</oneSwitch>\n'
-            xml += "</newSwitchVector>\n"
+        xml = f'<newSwitchVector device="{device}" name="{name}">\n'
+        for s in on_switches:
+            xml += f'  <oneSwitch name="{s}">On</oneSwitch>\n'
+        xml += "</newSwitchVector>\n"
 
         # print(f"DEBUG: Sending Switch XML:\n{xml}")
         await self.send_data(xml.encode())
