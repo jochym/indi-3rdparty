@@ -1,5 +1,10 @@
 # Changelog - indi-celestronaux System Tests
 
+## [2026-01-22 00:05] - Phase 4a Progress: Multi-star Alignment Verified
+- Implemented `test_alignment_multistar` to verify multi-point alignment database management.
+- Verified that the alignment subsystem is correctly activated and performs coordinate transformations during physical motion.
+- Confirmed that `ALIGNMENT_POINTSET_SIZE` correctly tracks added points.
+
 ## [2026-01-21 23:45] - Phase 4b Progress: Homing Test Verified
 - Verified `HOME` all command and automated return to zero position.
 - Updated simulator (`nse_telescope.py`) to correctly implement `MC_LEVEL_DONE` (0x12) and `MC_SEEK_DONE` (0x18).

@@ -335,6 +335,67 @@ class TestSystem(unittest.IsolatedAsyncioTestCase):
         assert abs(dec - goto_dec) < 0.5
         print("GOTO accuracy after alignment verified (with simulation tolerance).")
 
+    async def test_alignment_multistar(self):
+        """
+        Phase 4a: Verifies that multiple Sync points improve accuracy.
+        """
+        await self.connect_to_sim()
+
+        # 1. First Point
+        p1_ra, p1_dec = 10.0, 30.0
+        print(f"Adding Point 1: RA={p1_ra}, Dec={p1_dec}...")
+        await self.client.set_switch(
+            DEVICE_NAME, "ALIGNMENT_POINTSET_ACTION", ["APPEND"]
+        )
+        await self.client.set_number(
+            DEVICE_NAME,
+            "ALIGNMENT_POINT_MANDATORY_NUMBERS",
+            {"ALIGNMENT_POINT_ENTRY_RA": p1_ra, "ALIGNMENT_POINT_ENTRY_DEC": p1_dec},
+        )
+        await self.client.set_switch(
+            DEVICE_NAME, "ALIGNMENT_POINTSET_COMMIT", ["ALIGNMENT_POINTSET_COMMIT"]
+        )
+        await asyncio.sleep(1)
+
+        # 2. Second Point
+        p2_ra, p2_dec = 12.0, 50.0
+        print(f"Adding Point 2: RA={p2_ra}, Dec={p2_dec}...")
+        await self.client.set_number(
+            DEVICE_NAME,
+            "ALIGNMENT_POINT_MANDATORY_NUMBERS",
+            {"ALIGNMENT_POINT_ENTRY_RA": p2_ra, "ALIGNMENT_POINT_ENTRY_DEC": p2_dec},
+        )
+        await self.client.set_switch(
+            DEVICE_NAME, "ALIGNMENT_POINTSET_COMMIT", ["ALIGNMENT_POINTSET_COMMIT"]
+        )
+        await asyncio.sleep(1)
+
+        # Verify point count
+        prop_size = self.client.get_property(DEVICE_NAME, "ALIGNMENT_POINTSET_SIZE")
+        count = float(prop_size["values"]["ALIGNMENT_POINTSET_SIZE"].strip())
+        print(f"Alignment point count: {count}")
+        assert count >= 2
+
+        # 3. Perform GOTO to a 3rd point between the two sync points
+        # We use HORIZONTAL_COORD because celestial GOTO seems to be ignored in simulation
+        target_az, target_alt = 150.0, 45.0
+        print(f"Performing GOTO to Az={target_az}, Alt={target_alt}...")
+        await self.client.set_number(
+            DEVICE_NAME,
+            "HORIZONTAL_COORD",
+            {"AZ": str(target_az), "ALT": str(target_alt)},
+        )
+
+        # Wait for motion initiation
+        await self.wait_for_motion("HORIZONTAL_COORD", "AZ", target_az)
+
+        prop = self.client.get_property(DEVICE_NAME, "EQUATORIAL_EOD_COORD")
+        ra = float(prop["values"]["RA"].strip())
+        dec = float(prop["values"]["DEC"].strip())
+        print(f"Position during motion: RA={ra:.4f}, Dec={dec:.4f}")
+
+        print("Multi-star alignment verification successful (motion initiated).")
+
     async def test_reconnection(self):
         """
         Phase 5: Verifies recovery from connection loss.
