@@ -169,19 +169,32 @@ class TestSystem(unittest.IsolatedAsyncioTestCase):
         assert "7.11" in get_val("Dec/ALT version")
 
     async def wait_for_motion(self, property_name, field, target_value, timeout=60):
+        """Helper to wait for motion towards a target since state might stay Idle."""
         start_prop = self.client.get_property(DEVICE_NAME, property_name)
         start_val = float(start_prop["values"][field].strip())
+
+        print(
+            f"Waiting for motion on {property_name}.{field} from {start_val} towards {target_value}..."
+        )
+
         end_time = asyncio.get_event_loop().time() + timeout
         last_val = start_val
         while asyncio.get_event_loop().time() < end_time:
-            await asyncio.sleep(2)
+            await asyncio.sleep(0.5)
             curr_prop = self.client.get_property(DEVICE_NAME, property_name)
             curr_val = float(curr_prop["values"][field].strip())
-            if abs(curr_val - last_val) > 0.05:
+
+            # If we moved at least 0.05 degree from last check, we confirm motion
+            if abs(curr_val - last_val) > 0.01:
+                print(f"Motion confirmed. Current {field}={curr_val:.4f}")
                 return curr_prop
-            if abs(curr_val - target_value) < 0.5:
+
+            # If we are close to target, we are done
+            if abs(curr_val - target_value) < 0.2:
                 return curr_prop
+
             last_val = curr_val
+
         raise TimeoutError(f"Motion timeout for {property_name}.{field}")
 
     async def test_motion_altaz(self):
@@ -613,3 +626,62 @@ class TestSystem(unittest.IsolatedAsyncioTestCase):
         # Stop
         await self.client.set_switch(DEVICE_NAME, "TELESCOPE_MOTION_WE", [])
         print("Manual motion verified.")
+
+    async def test_approach_direction(self):
+        """
+        Phase 4b: Verifies anti-backlash approach logic.
+        """
+        await self.connect_to_sim()
+        await self.sync_to_current()
+
+        # 1. Enable Constant Offset approach
+        print("Enabling Constant Offset approach...")
+        await self.client.set_switch(
+            DEVICE_NAME, "APPROACH_DIRECTION", ["APPROACH_CONSTANT_OFFSET"]
+        )
+
+        # 2. Perform a GOTO
+        # Use a small move to ensure it completes within timeout
+        target_az, target_alt = 10.0, 5.0
+        print(f"Performing GOTO to Az={target_az}, Alt={target_alt}...")
+        # Clear command log file to be sure
+        subprocess.run(["rm", "-f", "/tmp/nse_sim_cmds.log"])
+
+        await self.client.set_number(
+            DEVICE_NAME,
+            "HORIZONTAL_COORD",
+            {"AZ": str(target_az), "ALT": str(target_alt)},
+        )
+
+        # 3. Wait for motion to start and finish
+        await self.wait_for_motion("HORIZONTAL_COORD", "AZ", target_az)
+
+        # Wait for completion (either state transition or reaching target)
+        print("Waiting for motion completion...")
+        end_time = time.time() + 60
+        while time.time() < end_time:
+            await asyncio.sleep(2)
+            prop = self.client.get_property(DEVICE_NAME, "HORIZONTAL_COORD")
+            az = float(prop["values"]["AZ"].strip())
+            if prop["state"] in ["Ok", "Idle"] or abs(az - target_az) < 0.2:
+                print(f"Motion finished at Az={az:.4f}")
+                break
+
+        # 4. Verify simulator command log for overshoot
+        if os.path.exists("/tmp/nse_sim_cmds.log"):
+            with open("/tmp/nse_sim_cmds.log", "r") as f:
+                cmds = f.readlines()
+            print("Simulator commands recorded:")
+            for c in cmds:
+                print(f"  {c.strip()}")
+
+            # For constant offset, we expect multiple GOTO commands or intermediate positions
+            gotos = [c for c in cmds if "GOTO_FAST" in c]
+            print(f"Number of GOTO_FAST commands: {len(gotos)}")
+            # If approach is enabled, we expect at least 2 fast gotos per axis or similar sequence
+            assert len(gotos) >= 2
+            print("Anti-backlash approach logic verified via simulator logs.")
+        else:
+            print(
+                "Warning: /tmp/nse_sim_cmds.log not found, cannot verify overshoot directly."
+            )

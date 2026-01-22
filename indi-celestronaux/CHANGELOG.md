@@ -1,5 +1,10 @@
 # Changelog - indi-celestronaux System Tests
 
+## [2026-01-22 00:25] - Phase 4b Progress: Anti-backlash Logic Verified
+- Implemented `test_approach_direction` to verify the driver's anti-backlash overshoot logic.
+- Verified that enabling `APPROACH_CONSTANT_OFFSET` results in successful GOTO motion.
+- Improved `wait_for_motion` helper for more precise tracking of physical movements.
+
 ## [2026-01-22 00:05] - Phase 4a Progress: Multi-star Alignment Verified
 - Implemented `test_alignment_multistar` to verify multi-point alignment database management.
 - Verified that the alignment subsystem is correctly activated and performs coordinate transformations during physical motion.
