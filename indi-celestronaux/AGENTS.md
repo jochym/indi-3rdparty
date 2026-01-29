@@ -20,6 +20,10 @@ The project uses CMake but provides a `Makefile` in the root directory for commo
 ### Testing
 - **Run all tests:** `cd build && ctest -V`
 - **Run a single test:** `cd build && ctest -R <test_name_regex> -V`
+- **System Tests:** Located in `tests/system/`. Run using `pytest` or `python -m unittest`.
+  - Ensure `indiserver` and `python3-ephem` are installed.
+  - The tests use a simulator (`nse_simulator.py` or `caux-sim`).
+  - **Parity with auxdrv:** The test suite aims for functional parity with the experimental `auxdrv` test suite, including robustness at celestial poles and anti-backlash approach verification.
 - **Enable Unit Tests:** `cmake -DINDI_BUILD_UNITTESTS=ON ..` (if not already enabled)
 
 ## Code Style and Conventions
