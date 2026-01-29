@@ -477,6 +477,39 @@ class TestSystem(unittest.IsolatedAsyncioTestCase):
             if prop["state"] in ["Ok", "Idle"] or abs(az - target_az) < 0.5:
                 break
 
+    async def test_6b_robustness_pole(self):
+        """
+        Test mathematical robustness at the celestial pole (Dec +90.0).
+        Ported from auxdrv test suite.
+        """
+        await self.connect_to_sim()
+        # Sync to establish alignment
+        await self.sync_to_current()
+
+        # Issue GOTO to exactly Dec 90.0
+        target_ra = 12.0
+        target_dec = 90.0
+        await self.client.set_switch(DEVICE_NAME, "ON_COORD_SET", ["SLEW"])
+        await self.client.set_number(
+            DEVICE_NAME,
+            "EQUATORIAL_EOD_COORD",
+            {"RA": str(target_ra), "DEC": str(target_dec)},
+        )
+
+        # Wait for motion or timeout
+        try:
+            await self.client.wait_for_state(
+                DEVICE_NAME, "EQUATORIAL_EOD_COORD", "Busy", timeout=5
+            )
+        except:
+            pass
+
+        # If it reaches 'Ok' or stays 'Idle' without crashing, it's successful
+        prop = await self.client.wait_for_state(
+            DEVICE_NAME, "EQUATORIAL_EOD_COORD", ["Ok", "Idle", "Alert"], timeout=30
+        )
+        assert prop["state"] != "Alert"
+
     async def test_predictive_tracking(self):
         await self.connect_to_sim()
         await self.client.set_switch(
