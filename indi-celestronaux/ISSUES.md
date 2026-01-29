@@ -52,12 +52,16 @@ This file tracks issues discovered during the development and testing of the Cel
 ### 12. Extremely slow GOTO speed in simulation
 - **Observation**: Slew speeds in simulation are very low, making long-distance GOTOs time out in tests.
 
-### 13. Manual Motion (NSWE) buttons not functional
-- **Observation**: Commands sent to `TELESCOPE_MOTION_NS` and `TELESCOPE_MOTION_WE` are ignored.
-- **Cause**: The driver implements `MoveNS()` and `MoveWE()` but does not set the `TELESCOPE_CAN_SLEW` capability bit in its constructor. As a result, the base `INDI::Telescope` class does not define these properties or process updates for them.
-- **Location**: `celestronaux.cpp`, Constructor.
+### 13. Manual Motion (NSWE) buttons not functional in some clients
+- **Observation**: Commands sent to `TELESCOPE_MOTION_NS` and `TELESCOPE_MOTION_WE` might be ignored or not shown by standard clients.
+- **Cause**: The driver implements `MoveNS()` and `MoveWE()` but does not set the `TELESCOPE_CAN_SLEW` capability bit. While advanced clients like KStars might detect and use these methods, standard clients relying on capability flags won't see these properties.
+- **Workaround**: Tests can attempt to send raw XML for these properties even if not explicitly advertised.
 
-### 14. Predictive tracking inactive in simulation
-- **Observation**: Even with multiple alignment points and significant induced tracking error, the driver's background tracking loop does not send periodic guide rate updates to the simulator.
-- **Impact**: Tracking accuracy over long periods cannot be verified in the current simulation environment.
-- **Location**: `celestronaux.cpp`, `TimerHit()` / `trackByRate()` loop.
+### 14. Predictive tracking (Alt-Az)
+- **Observation**: Alt-Az tracking is the primary and modern mechanism, replacing the older PID-based loop.
+- **Status**: Predictive tracking is active when `m_MountType == ALT_AZ`.
+- **Action**: Test suite should ensure PID is disabled and verify `SET_GUIDERATE` commands in Alt-Az mode.
+
+### 15. MOUNT_TYPE property missing from GUI
+- **Observation**: The `MOUNT_TYPE` switch property is commented out in `initProperties()`, preventing users from switching between GEM and Alt-Az via the INDI panel.
+- **Impact**: Defaulting logic depends on the device name, which may lead to incorrect coordinate transformations if the name doesn't match the physical mount.
