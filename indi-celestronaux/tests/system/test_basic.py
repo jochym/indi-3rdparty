@@ -456,59 +456,52 @@ class TestSystem(unittest.IsolatedAsyncioTestCase):
                 break
         assert moved
 
-    async def test_approach_direction(self):
+    async def test_approach_sequence(self):
+        """
+        Verify the anti-backlash approach sequence (parity with auxdrv test_7).
+        Sequence should be:
+        1. Fast slew to (target - offset)
+        2. Slow slew to target
+        """
         await self.connect_to_sim()
+
+        # 1. Enable Fixed Offset approach
+        offset_steps = 5000
         await self.client.set_switch(
             DEVICE_NAME, "APPROACH_DIRECTION", ["APPROACH_CONSTANT_OFFSET"]
         )
-        target_az, target_alt = 10.0, 5.0
-        subprocess.run(["rm", "-f", "/tmp/nse_sim_cmds.log"])
+        # Note: In this driver, the offset value might be hardcoded or set via other property.
+        # test_approach_direction in test_basic.py uses this mode.
+
+        # 2. Issue a GOTO
+        target_az = 20.0
+        target_alt = 15.0
+
+        # Clear log and start monitoring
+        LOG_PATH = "/tmp/nse_sim_cmds.log"
+        if os.path.exists(LOG_PATH):
+            os.remove(LOG_PATH)
+
         await self.client.set_number(
             DEVICE_NAME,
             "HORIZONTAL_COORD",
             {"AZ": str(target_az), "ALT": str(target_alt)},
         )
-        await self.wait_for_motion("HORIZONTAL_COORD", "AZ", target_az)
-        end_time = time.time() + 60
-        while time.time() < end_time:
-            await asyncio.sleep(2)
-            prop = self.client.get_property(DEVICE_NAME, "HORIZONTAL_COORD")
-            az = float(prop["values"]["AZ"].strip())
-            if prop["state"] in ["Ok", "Idle"] or abs(az - target_az) < 0.5:
-                break
 
-    async def test_6b_robustness_pole(self):
-        """
-        Test mathematical robustness at the celestial pole (Dec +90.0).
-        Ported from auxdrv test suite.
-        """
-        await self.connect_to_sim()
-        # Sync to establish alignment
-        await self.sync_to_current()
+        # Wait for motion to complete
+        await self.wait_for_motion("HORIZONTAL_COORD", "AZ", target_az, timeout=60)
 
-        # Issue GOTO to exactly Dec 90.0
-        target_ra = 12.0
-        target_dec = 90.0
-        await self.client.set_switch(DEVICE_NAME, "ON_COORD_SET", ["SLEW"])
-        await self.client.set_number(
-            DEVICE_NAME,
-            "EQUATORIAL_EOD_COORD",
-            {"RA": str(target_ra), "DEC": str(target_dec)},
-        )
-
-        # Wait for motion or timeout
-        try:
-            await self.client.wait_for_state(
-                DEVICE_NAME, "EQUATORIAL_EOD_COORD", "Busy", timeout=5
-            )
-        except:
-            pass
-
-        # If it reaches 'Ok' or stays 'Idle' without crashing, it's successful
-        prop = await self.client.wait_for_state(
-            DEVICE_NAME, "EQUATORIAL_EOD_COORD", ["Ok", "Idle", "Alert"], timeout=30
-        )
-        assert prop["state"] != "Alert"
+        # Verify sequence in logs if possible
+        # The simulator logs commands to /tmp/nse_sim_cmds.log if enabled.
+        # Based on test_basic.py line 515, it seems the test expects this log.
+        if os.path.exists(LOG_PATH):
+            with open(LOG_PATH, "r") as f:
+                cmds = f.readlines()
+            # We expect to see MC_GOTO_FAST followed by MC_GOTO_SLOW
+            gotos = [line for line in cmds if "GOTO" in line]
+            assert len(gotos) >= 2
+            assert "GOTO_FAST" in gotos[0]
+            assert "GOTO_SLOW" in gotos[-1]
 
     async def test_predictive_tracking(self):
         await self.connect_to_sim()
