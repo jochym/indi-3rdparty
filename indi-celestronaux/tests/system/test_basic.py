@@ -504,48 +504,67 @@ class TestSystem(unittest.IsolatedAsyncioTestCase):
             assert "GOTO_SLOW" in gotos[-1]
 
     async def test_predictive_tracking(self):
+        """
+        Verify the predictive tracking loop (Issue 14).
+        The driver should send periodic guide rate updates to compensate for drift.
+        """
         await self.connect_to_sim()
+
+        # 1. Setup multi-star alignment to enable the tracking model
+        # (Need at least 2 points for a basic model)
         await self.client.set_switch(
             DEVICE_NAME, "ALIGNMENT_POINTSET_ACTION", ["APPEND"]
         )
-        await self.client.set_number(
-            DEVICE_NAME,
-            "ALIGNMENT_POINT_MANDATORY_NUMBERS",
-            {"ALIGNMENT_POINT_ENTRY_RA": 10.0, "ALIGNMENT_POINT_ENTRY_DEC": 30.0},
-        )
-        await self.client.set_switch(
-            DEVICE_NAME, "ALIGNMENT_POINTSET_COMMIT", ["ALIGNMENT_POINTSET_COMMIT"]
-        )
-        await asyncio.sleep(1)
-        await self.client.set_number(
-            DEVICE_NAME,
-            "ALIGNMENT_POINT_MANDATORY_NUMBERS",
-            {"ALIGNMENT_POINT_ENTRY_RA": 12.0, "ALIGNMENT_POINT_ENTRY_DEC": 50.0},
-        )
-        await self.client.set_switch(
-            DEVICE_NAME, "ALIGNMENT_POINTSET_COMMIT", ["ALIGNMENT_POINTSET_COMMIT"]
-        )
-        await asyncio.sleep(1)
+        points = [(10.0, 30.0), (12.0, 50.0)]
+        for ra, dec in points:
+            await self.client.set_number(
+                DEVICE_NAME,
+                "ALIGNMENT_POINT_MANDATORY_NUMBERS",
+                {"ALIGNMENT_POINT_ENTRY_RA": ra, "ALIGNMENT_POINT_ENTRY_DEC": dec},
+            )
+            await self.client.set_switch(
+                DEVICE_NAME, "ALIGNMENT_POINTSET_COMMIT", ["ALIGNMENT_POINTSET_COMMIT"]
+            )
+            await asyncio.sleep(1)
+
+        # 2. Enable Tracking
         await self.client.set_switch(
             DEVICE_NAME, "TELESCOPE_TRACK_MODE", ["TRACK_SIDEREAL"]
         )
-        await asyncio.sleep(1)
         await self.client.set_switch(DEVICE_NAME, "TELESCOPE_TRACK_STATE", ["TRACK_ON"])
+
+        # 3. Increase polling rate for faster observation
         await self.client.set_number(DEVICE_NAME, "POLLING_PERIOD", {"PERIOD_MS": 250})
+
+        # 4. Induce a "drift" by manual motion then stopping
         await self.client.set_switch(DEVICE_NAME, "TELESCOPE_SLEW_RATE", ["2x"])
         await self.client.set_switch(
             DEVICE_NAME, "TELESCOPE_MOTION_NS", ["MOTION_NORTH"]
         )
-        await asyncio.sleep(5)
+        await asyncio.sleep(2)
         await self.client.set_switch(DEVICE_NAME, "TELESCOPE_MOTION_NS", [])
+
+        # 5. Monitor simulator logs for periodic rate updates (MC_SET_POS/NEG_GUIDERATE)
         LOG_PATH = "/tmp/nse_sim_cmds.log"
         if os.path.exists(LOG_PATH):
             os.remove(LOG_PATH)
-        with open(LOG_PATH, "w") as f:
-            f.write("LOG_START\n")
-        for _ in range(30):
+
+        # Wait for several update cycles (driver usually updates every few seconds)
+        updates_found = 0
+        start_obs = time.time()
+        while time.time() - start_obs < 30:
             await asyncio.sleep(2)
             if os.path.exists(LOG_PATH):
                 with open(LOG_PATH, "r") as f:
-                    if any("MOVE_" in line for line in f):
-                        break
+                    content = f.read()
+                    # Look for MC_SET_POS_GUIDERATE (0x06) or MC_SET_NEG_GUIDERATE (0x07)
+                    # The simulator logs these as "SET_POS_GUIDERATE" or similar if mapped
+                    if "GUIDERATE" in content:
+                        updates_found = content.count("GUIDERATE")
+                        if updates_found >= 2:
+                            break
+
+        # Note: If this fails, it confirms Issue 14
+        assert updates_found >= 2, (
+            f"Predictive tracking updates not found in logs. Found: {updates_found}"
+        )
