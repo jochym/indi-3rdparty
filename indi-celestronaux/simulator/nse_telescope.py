@@ -851,6 +851,8 @@ class NexStarScope:
                 c_name = cmd_names.get(c, f"0x{c:02x}")
                 t_name = trg_names.get(t, f"0x{t:02x}")
                 self.cmd_log.append(f"{t_name}: {c_name}")
+                with open("/tmp/nse_sim_cmds.log", "a") as f:
+                    f.write(f"{t_name}: {c_name}\n")
 
                 if t in (0x10, 0x11):
                     handlers = self._mc_handlers
