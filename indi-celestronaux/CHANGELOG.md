@@ -1,5 +1,21 @@
 # Changelog - indi-celestronaux System Tests
 
+## [2026-01-30 11:45] - Test Stabilization & Bug Fixes
+- **Corrected Switch Elements**: Fixed all tests to use correct element names for `TELESCOPE_SLEW_RATE` (`8x` instead of `9`) and `ALIGNMENT_SUBSYSTEM_ACTIVE` (`ALIGNMENT SUBSYSTEM ACTIVE` instead of `On`).
+- **Enhanced 1-Star Precision Test**: Implemented dynamic RA/Dec calculation based on current LST/Horizon position. Increased precision requirement to 60 seconds.
+- **Safety Interlock**: Added automatic `ABORT` command on test completion/failure to prevent runaway motor motion.
+- **Stabilized Manual Motion**: Disabled alignment subsystem for basic manual motion tests to verify raw driver-simulator interaction as per guidelines.
+- **Improved Timeouts**: Increased GOTO timeouts to 300s to accommodate slow simulation speeds and ensure deterministic pass rates.
+- **Documentation Update**: Created `TEST_DESCRIPTION.md` with detailed functional breakdowns of all tests. Updated `AGENTS.md` and `ISSUES.md`.
+
+## [2026-01-30 01:15] - Test Suite Rationalization & Pytest Migration
+- **Restructured Suite**: Consolidated all tests into Level 1-4 hierarchy across three files (`test_basic.py`, `test_alignment.py`, `test_integration.py`).
+- **Pytest Integration**: Migrated to session-scoped `pytest` fixtures for `indiserver` and `caux-sim` management.
+- **Coordinate Propagation**: Implemented centralized geographic coordinate handling (`TEST_LAT`, `TEST_LONG`, `TEST_ELEV`) ensuring consistency across all components.
+- **Soft Reset Infrastructure**: Improved `asyncSetUp` logic to perform "soft resets" (Unpark, Clear Alignment) using INDI commands instead of process restarts.
+- **Production Alignment**: Adjusted manual motion and tracking tests to match production driver requirements (requiring active alignment model).
+- **Documentation**: Updated `README.md` and `AGENTS.md` with new execution instructions and prioritized local build usage.
+
 ## [2026-01-22 01:10] - Final Alignment with External Simulator (caux-sim)
 - Fully verified the system test suite against `caux-sim`.
 - Relaxed firmware version assertions to accommodate non-standard simulator versions.

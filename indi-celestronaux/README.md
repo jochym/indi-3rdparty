@@ -100,3 +100,25 @@ fakeroot debian/rules clean
 this should produce two packages in the main build directory (above `package`),
 which you can install with `sudo dpkg -i indi-celestronaux_*.deb`.
 
+
+# System testing
+
+The driver includes a suite of end-to-end system tests that can be run against a simulator.
+
+### Prerequisites
+- `indiserver`
+- `python3-pytest`
+- `caux-sim` (external simulator)
+
+### Running tests
+To run the full suite using the `caux-sim` simulator:
+
+```bash
+export INDI_SIM_EXEC=caux-sim
+python3 -m pytest -v tests/system/
+```
+
+Individual test files can be run similarly. The tests automatically manage the lifecycle of the `indiserver` and the simulator.
+
+For more technical details on testing and simulator configuration, see `AGENTS.md`.
+

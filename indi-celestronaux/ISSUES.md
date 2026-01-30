@@ -1,67 +1,57 @@
 # Issues Registry - indi-celestronaux
 
-This file tracks issues discovered during the development and testing of the Celestron AUX driver and its system tests.
+This file tracks unresolved issues and observations discovered during the development and testing of the Celestron AUX driver.
 
-## Status: Resolved
+---
 
-### 1. Firmware Version Retrieval Failure
-- **Issue**: Driver failed to retrieve firmware versions (values remained "Unknown").
-- **Resolution**: Identified two causes:
-  1. Test was using incorrect property `DEVICE_PORT` instead of `DEVICE_ADDRESS`, so driver never actually connected to simulator.
-  2. Simulator was not responding correctly to `GET_VER` (0xFE).
-- **Fix**: Updated `test_basic.py` and simulator code. Handshake now succeeds.
+## Part 1: Testing Suite Issues (TODO List)
 
-### 2. Simulator crash on 2-byte guiderate
-- **Issue**: Simulator crashed when receiving `MC_SET_POS_GUIDERATE` with 2-byte payload.
-- **Resolution**: Updated `nse_telescope.py` to handle variable length payloads (padding to 3 bytes if needed).
+These issues relate to the completeness and robustness of the system tests.
 
-### 3. Driver Source Typo (Build Failure)
-- **Issue**: Typo in `celestronaux.cpp` (`proportionalTerm` instead of `propotionalTerm`) prevented building against modern INDI libraries.
-- **Resolution**: Fixed the typo in `celestronaux.cpp`.
+### 1. Homing Emulation in Simulator
+*   **Description:** `test_homing` is currently skipped because the `caux-sim` binary does not emulate the physical index sensors required for the homing sequence.
+*   **Impact:** Homing logic in the driver (Move to Index) remains unverified in the automated suite.
+*   **Requirement:** Enhance the simulator to support index marker triggers or provide a mock sensor response.
 
-### 4. GOTO RA/Dec ignored after Sync
-- **Issue**: Commands sent to `EQUATORIAL_EOD_COORD` did not initiate motion.
-- **Resolution**: Identified that the driver ignores celestial commands until an alignment point is established via `Sync`. Also ensured the client uses `<newNumberVector>` instead of `<newTextVector>` for coordinates.
+### 2. CI/CD Integration
+*   **Description:** The current test suite runs locally but is not yet integrated into a GitHub Actions or similar CI pipeline.
+*   **Requirement:** Create a workflow that builds the driver, starts the simulator, and executes `pytest`.
 
-## Status: Open / Potential Driver Issues
+### 3. HEX Log Analysis Robustness
+*   **Description:** `test_predictive_tracking_altaz` relies on regex searching in `/tmp/nse_sim_cmds.log`. This is brittle if the simulator's log format changes.
+*   **Requirement:** Implement a structured log parser or a real-time AUX bus sniffer within the test client.
 
-### 5. Firmware Info State stuck at Idle
-- **Observation**: `Firmware Info` property values are updated correctly, but the property state remains `IPS_IDLE`.
-- **Impact**: Clients might wait indefinitely for an `IPS_OK` state that never arrives.
-- **Location**: `celestronaux.cpp`, `updateProperties()`.
+---
 
-### 6. HORIZONTAL_COORD State stuck at Idle
-- **Observation**: Even during active tracking or slewing, `HORIZONTAL_COORD` state remains `IPS_IDLE`.
-- **Impact**: Makes it difficult for clients to detect motion completion via this property.
+## Part 2: Driver Issues and Observations
 
-### 7. EQUATORIAL_EOD_COORD state transitions to Idle after Slew
-- **Observation**: Upon completion of a GOTO, the state transitions from `Busy` to `Idle` instead of `Ok`.
+These are irregularities or potential bugs in the C++ driver that require separate investigation.
 
-### 8. Default Mount Type Mismatch
-- **Observation**: Driver defaults to `EQ_GEM` internally (visible in `TELESCOPE_MOUNT_TYPE` property) even when connecting to an Alt-Az simulator (Evolution). This forces unnecessary coordinate transformations.
+### 1. Connection Loss Detection Latency
+*   **Observation:** The driver takes a significant amount of time (>60s) to detect that the TCP connection to the mount/simulator has been dropped.
+*   **Replication:**
+    1. Start `indiserver` with the driver and connect to `caux-sim`.
+    2. Kill the `caux-sim` process.
+    3. Monitor the `CONNECTION` property in an INDI client. It remains `Ok` (Green) for over a minute before transitioning to `Alert`.
+*   **Diagnostic Tool:** `indi-celestronaux/tests/system/test_basic.py::test_reconnection` demonstrates this behavior.
 
-### 9. ON_COORD_SET Multi-switch Issue
-- **Observation**: `ON_COORD_SET` can have multiple switches (`TRACK`, `SLEW`, `SYNC`) set to `On` simultaneously if the client is not careful. The driver does not seem to enforce 1-of-many rule internally upon receiving updates.
+### 2. Property State Jitter (Idle vs Ok)
+*   **Observation:** The `EQUATORIAL_EOD_COORD` property often transitions to `Idle` instead of `Ok` immediately after a successful GOTO.
+*   **Observation:** The `HORIZONTAL_COORD` property remains in `Idle` state even during active tracking or slewing.
+*   **Impact:** Standard INDI clients may interpret `Idle` as a failure to reach the target or as an inactive state, leading to UI inconsistencies.
+*   **Replication:** Use `debug_goto.py` (or run `test_1star_sync_accuracy`) and observe the state transitions in the console output.
 
-### 10. Sync Command Time Dependency
-- **Observation**: Issuing a `Sync` command results in unexpected RA/Dec values if the driver's `TIME_UTC` is not explicitly set to match the test's context. The driver uses the system OS clock for transformations.
+### 3. Predictive Alt-Az Tracking Update Interval
+*   **Observation:** According to NexStar documentation, Alt-Az tracking rates should be updated every 30 seconds. In testing, the update frequency seems inconsistent or highly dependent on system load.
+*   **Impact:** Infrequent updates may lead to "staircase" tracking behavior, affecting long-exposure photography.
+*   **Replication:** Run `test_predictive_tracking_altaz` and analyze the timestamps of `MC_SET_POS_GUIDERATE` commands in `/tmp/nse_sim_cmds.log`.
 
-### 11. Encoder to Degree Conversion Offset
-- **Observation**: There is a constant offset between raw encoder steps and reported `HORIZONTAL_COORD` degrees. While the scale ($2^{24}$ steps/rev) is correct, the zero point is arbitrary until aligned.
+### 4. ON_COORD_SET Rule Enforcement
+*   **Observation:** The `ON_COORD_SET` switch property (TRACK/SLEW/SYNC) does not strictly enforce the "OneOfMany" rule upon receiving updates. It is possible for multiple elements to appear `On` if the client sends multiple rapid updates.
+*   **Impact:** Ambiguous driver state if both `SYNC` and `SLEW` are active.
+*   **Location:** `celestronaux.cpp`, `ISNewSwitch()`.
 
-### 12. Extremely slow GOTO speed in simulation
-- **Observation**: Slew speeds in simulation are very low, making long-distance GOTOs time out in tests.
-
-### 13. Manual Motion (NSWE) buttons not functional in some clients
-- **Observation**: Commands sent to `TELESCOPE_MOTION_NS` and `TELESCOPE_MOTION_WE` might be ignored or not shown by standard clients.
-- **Cause**: The driver implements `MoveNS()` and `MoveWE()` but does not set the `TELESCOPE_CAN_SLEW` capability bit. While advanced clients like KStars might detect and use these methods, standard clients relying on capability flags won't see these properties.
-- **Workaround**: Tests can attempt to send raw XML for these properties even if not explicitly advertised.
-
-### 14. Predictive tracking (Alt-Az)
-- **Observation**: Alt-Az tracking is the primary and modern mechanism, replacing the older PID-based loop.
-- **Status**: Predictive tracking is active when `m_MountType == ALT_AZ`.
-- **Action**: Test suite should ensure PID is disabled and verify `SET_GUIDERATE` commands in Alt-Az mode.
-
-### 15. MOUNT_TYPE property missing from GUI
-- **Observation**: The `MOUNT_TYPE` switch property is commented out in `initProperties()`, preventing users from switching between GEM and Alt-Az via the INDI panel.
-- **Impact**: Defaulting logic depends on the device name, which may lead to incorrect coordinate transformations if the name doesn't match the physical mount.
+### 5. MOUNT_TYPE Configuration Missing
+*   **Observation:** The `MOUNT_TYPE` switch property is defined but commented out in `initProperties()`, preventing manual override of the mount's geometry (GEM vs Alt-Az).
+*   **Impact:** The driver relies on device name string matching to guess the mount type, which is prone to error.
+*   **Location:** `celestronaux.cpp`, line ~285.

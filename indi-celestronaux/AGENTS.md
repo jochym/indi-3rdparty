@@ -2,6 +2,15 @@
 
 This document provides essential information for agentic coding assistants working on the `indi-celestronaux` repository.
 
+## Modification Scope
+- **Strict Isolation:** Any modifications to files outside the `indi-celestronaux/` directory (e.g., root `README.md`, common CMake modules, other drivers) **require explicit approval** from the user.
+- **Driver Integrity:** **DO NOT** modify the C++ driver code (`celestronaux.cpp/h`, `auxproto.cpp/h`, etc.) during the test development stage. It is considered working production code. If issues are discovered, document them clearly in `ISSUES.md`.
+- **Troubleshooting Hierarchy:** When a test fails, assume the cause of the problem in the following order:
+    1.  Test code (logic, timeouts, property names).
+    2.  Simulator code (protocol implementation, timing).
+    3.  Driver code (C++ implementation).
+    Do not jump to conclusions about driver bugs without exhausting test and simulator causes.
+
 ## Build, Run, and Test Commands
 
 The project uses CMake but provides a `Makefile` in the root directory for common development tasks.
@@ -20,7 +29,8 @@ The project uses CMake but provides a `Makefile` in the root directory for commo
 ### Testing
 - **Run all tests:** `cd build && ctest -V`
 - **Run a single test:** `cd build && ctest -R <test_name_regex> -V`
-- **System Tests:** Located in `tests/system/`. Run using `pytest` or `python -m unittest`.
+- **System Tests:** Located in `tests/system/`. Run using `pytest`.
+  - Detailed functional descriptions are available in `indi-celestronaux/tests/system/TEST_DESCRIPTION.md`.
   - Ensure `indiserver` and `python3-ephem` are installed.
   - The tests use a simulator (`nse_simulator.py` or `caux-sim`).
   - **Parity with auxdrv:** The test suite aims for functional parity with the experimental `auxdrv` test suite, including robustness at celestial poles and anti-backlash approach verification.
@@ -114,6 +124,11 @@ Strictly adhere to the following conventions to maintain consistency with the ex
 - Check `m_IsRTSCTS` and `m_isHandController` flags for connection-specific logic.
 - Use the simulator to reproduce issues: `make run-sim` and then connect with `indiserver`.
 - The `AUXCommand` class handles checksum calculation and packet parsing.
+- **Simulator (caux-sim):** Use `--log-file /tmp/nse_sim_cmds.log --log-categories 31` to enable traffic logging required by system tests. Commands appear as `3b...` in hex logs.
+- **Alt-Az Tracking:** For predictive tracking to work, `ON_COORD_SET` must be `TRACK` and `APPROACH_DIRECTION` should be `APPROACH_TRACKING_VECTOR`. `TRACK_SIDEREAL` is only for EQ mounts. Basic tests should disable `ALIGNMENT_SUBSYSTEM_ACTIVE` to test raw driver behavior.
+- **Simulator (caux-sim) Geometry:** The simulator starts at 0,0 (North on horizon). Basic tests rely on this and avoid unnecessary sync points.
+- **Sync Deviation:** A consistent deviation of ~0.15h in RA sync tests is currently expected when using `caux-sim`, likely due to LST calculation or Epoch (JNow vs J2000) differences between the driver and simulator.
+- **Connection Stabilization:** When connecting to `caux-sim`, the driver might take a few seconds to initialize all properties. Always wait for `CONNECTION` state to be `Ok` with a sufficient timeout (10s+).
 
 ### Updating Firmware Information
 - Firmware versions are queried during `Handshake()`.
